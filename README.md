@@ -1,6 +1,10 @@
-# GoPlus AgentGuard
+<p align="center">
+  <img src="assets/logo.png" alt="GoPlus AgentGuard" width="120" />
+</p>
 
-**Security guard for your AI agent.** Automatically blocks dangerous commands, prevents data leaks, and protects your secrets.
+<h1 align="center">GoPlus AgentGuard</h1>
+
+<p align="center"><b>Security guard for your AI agent.</b> Automatically blocks dangerous commands, prevents data leaks, and protects your secrets.</p>
 
 Your AI agent can execute `rm -rf /`, read your SSH keys, and send passwords to Discord. GoPlus AgentGuard stops all of that.
 
