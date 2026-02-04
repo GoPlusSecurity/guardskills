@@ -269,14 +269,17 @@ Display recent security events from the GoPlus AgentGuard audit log.
 The audit log is stored at `~/.agentguard/audit.jsonl`. Each line is a JSON object with:
 
 ```json
-{"timestamp":"...","tool_name":"Bash","tool_input_summary":"rm -rf /","decision":"deny","risk_level":"critical","risk_tags":["DANGEROUS_COMMAND"]}
+{"timestamp":"...","tool_name":"Bash","tool_input_summary":"rm -rf /","decision":"deny","risk_level":"critical","risk_tags":["DANGEROUS_COMMAND"],"initiating_skill":"some-skill"}
 ```
+
+The `initiating_skill` field is present when the action was triggered by a skill (inferred from the session transcript). When absent, the action came from the user directly.
 
 ### How to Display
 
 1. Read `~/.agentguard/audit.jsonl` using the Read tool
 2. Parse each line as JSON
 3. Format as a table showing recent events (last 50 by default)
+4. If any events have `initiating_skill`, add a "Skill Activity" section grouping events by skill
 
 ### Output Format
 
@@ -289,10 +292,20 @@ The audit log is stored at `~/.agentguard/audit.jsonl`. Each line is a JSON obje
 
 ### Recent Events
 
-| Time | Tool | Action | Decision | Risk | Tags |
-|------|------|--------|----------|------|------|
-| 2025-01-15 14:30 | Bash | rm -rf / | DENY | critical | DANGEROUS_COMMAND |
-| 2025-01-15 14:28 | Write | .env | CONFIRM | high | SENSITIVE_PATH |
+| Time | Tool | Action | Decision | Risk | Tags | Skill |
+|------|------|--------|----------|------|------|-------|
+| 2025-01-15 14:30 | Bash | rm -rf / | DENY | critical | DANGEROUS_COMMAND | some-skill |
+| 2025-01-15 14:28 | Write | .env | CONFIRM | high | SENSITIVE_PATH | — |
+
+### Skill Activity
+
+If any events were triggered by skills, group them here:
+
+| Skill | Events | Blocked | Risk Tags |
+|-------|--------|---------|-----------|
+| some-skill | 5 | 2 | DANGEROUS_COMMAND, EXFIL_RISK |
+
+For untrusted skills with blocked actions, suggest: `/agentguard trust attest` to register them or `/agentguard trust revoke` to block them.
 
 ### Summary
 <Brief analysis of security posture and any patterns of concern>
@@ -326,3 +339,24 @@ Set the GoPlus AgentGuard protection level.
 3. Confirm the change to the user
 
 If no level is specified, read and display the current config.
+
+---
+
+## Auto-Scan on Session Start
+
+When GoPlus AgentGuard is installed as a plugin, it automatically scans all skills in `~/.claude/skills/` at session startup:
+
+1. Discovers all skill directories (containing `SKILL.md`)
+2. Calculates artifact hash — skips skills already registered with the same hash
+3. Runs `quickScan()` on new or updated skills
+4. Auto-registers in the trust registry based on scan results:
+
+| Scan Result | Trust Level | Capabilities |
+|-------------|-------------|--------------|
+| `low` risk | `trusted` | `read_only` (filesystem read access) |
+| `medium` risk | `restricted` | `read_only` |
+| `high` / `critical` risk | `untrusted` | `none` (all capabilities denied) |
+
+This runs asynchronously and does not block session startup. Results are logged to `~/.agentguard/audit.jsonl`.
+
+Users can override auto-assigned trust levels with `/agentguard trust attest`.

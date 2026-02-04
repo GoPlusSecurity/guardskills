@@ -14,7 +14,7 @@
  */
 
 import { createRequire } from 'node:module';
-import { readFileSync, appendFileSync, mkdirSync, existsSync } from 'node:fs';
+import { readFileSync, appendFileSync, mkdirSync, existsSync, openSync, readSync, closeSync, fstatSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 
@@ -82,6 +82,117 @@ function readStdin() {
 }
 
 // ---------------------------------------------------------------------------
+// Infer initiating skill from transcript
+// ---------------------------------------------------------------------------
+
+/**
+ * Read the last ~4KB of the transcript file and look for the most recent
+ * Skill tool invocation to determine which skill (if any) is driving the
+ * current tool call.
+ *
+ * Returns the skill name (e.g. "agentguard") or null if the call appears
+ * to come directly from the user / main agent.
+ */
+function inferInitiatingSkill(transcriptPath) {
+  if (!transcriptPath) return null;
+  try {
+    const fd = openSync(transcriptPath, 'r');
+    const stat = fstatSync(fd);
+    const TAIL_SIZE = 4096;
+    const start = Math.max(0, stat.size - TAIL_SIZE);
+    const buf = Buffer.alloc(Math.min(TAIL_SIZE, stat.size));
+    readSync(fd, buf, 0, buf.length, start);
+    closeSync(fd);
+
+    const tail = buf.toString('utf-8');
+    const lines = tail.split('\n').filter(Boolean);
+
+    // Walk backwards — find the most recent Skill tool_use
+    for (let i = lines.length - 1; i >= 0; i--) {
+      try {
+        const entry = JSON.parse(lines[i]);
+        // Claude Code transcript entries with tool_use type
+        if (
+          entry.type === 'tool_use' &&
+          entry.name === 'Skill' &&
+          entry.input?.skill
+        ) {
+          return entry.input.skill;
+        }
+        // Also check content array format (assistant messages)
+        if (entry.role === 'assistant' && Array.isArray(entry.content)) {
+          for (const block of entry.content) {
+            if (
+              block.type === 'tool_use' &&
+              block.name === 'Skill' &&
+              block.input?.skill
+            ) {
+              return block.input.skill;
+            }
+          }
+        }
+      } catch {
+        // Not valid JSON — skip
+      }
+    }
+  } catch {
+    // Can't read transcript — not critical
+  }
+  return null;
+}
+
+// ---------------------------------------------------------------------------
+// Skill trust policy
+// ---------------------------------------------------------------------------
+
+/**
+ * Look up a skill in the trust registry and return its effective trust level
+ * and capabilities. For unknown/untrusted skills, enforce strict mode.
+ */
+async function getSkillTrustPolicy(skillId, agentguardInstance) {
+  if (!skillId || !agentguardInstance) {
+    return { trustLevel: null, capabilities: null, isKnown: false };
+  }
+  try {
+    const result = await agentguardInstance.registry.lookup({
+      id: skillId,
+      source: skillId,
+      version_ref: '0.0.0',
+      artifact_hash: '',
+    });
+    return {
+      trustLevel: result.effective_trust_level,
+      capabilities: result.effective_capabilities,
+      isKnown: result.record !== null,
+    };
+  } catch {
+    return { trustLevel: null, capabilities: null, isKnown: false };
+  }
+}
+
+/**
+ * Check if a skill's capabilities allow the given action type.
+ */
+function isActionAllowedByCapabilities(actionType, capabilities) {
+  if (!capabilities) return true; // No caps info → don't restrict
+  switch (actionType) {
+    case 'exec_command':
+      return capabilities.can_exec !== false;
+    case 'network_request':
+      return capabilities.can_network !== false;
+    case 'write_file':
+      return capabilities.can_write !== false;
+    case 'read_file':
+      return capabilities.can_read !== false;
+    case 'web3_tx':
+    case 'web3_sign':
+      return capabilities.can_web3 !== false;
+    default:
+      return true;
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Map Claude Code tool calls to ActionScanner envelopes
 // ---------------------------------------------------------------------------
 
@@ -89,10 +200,13 @@ function buildEnvelope(input) {
   const toolName = input.tool_name || '';
   const toolInput = input.tool_input || {};
 
+  // Infer which skill (if any) initiated this tool call
+  const initiatingSkill = inferInitiatingSkill(input.transcript_path);
+
   const actor = {
     skill: {
-      id: 'claude-code-session',
-      source: 'claude-code',
+      id: initiatingSkill || 'claude-code-session',
+      source: initiatingSkill || 'claude-code',
       version_ref: '0.0.0',
       artifact_hash: '',
     },
@@ -103,6 +217,7 @@ function buildEnvelope(input) {
     user_present: true, // Claude Code = interactive session
     env: 'prod',
     time: new Date().toISOString(),
+    initiating_skill: initiatingSkill || undefined,
   };
 
   // Bash → exec_command
@@ -244,7 +359,7 @@ function shouldAskAtLevel(decision, config) {
 // Audit logging
 // ---------------------------------------------------------------------------
 
-function writeAuditLog(input, decision) {
+function writeAuditLog(input, decision, initiatingSkill) {
   try {
     ensureDir();
     const entry = {
@@ -255,6 +370,9 @@ function writeAuditLog(input, decision) {
       risk_level: decision?.risk_level || 'low',
       risk_tags: decision?.risk_tags || [],
     };
+    if (initiatingSkill) {
+      entry.initiating_skill = initiatingSkill;
+    }
     appendFileSync(AUDIT_PATH, JSON.stringify(entry) + '\n');
   } catch {
     // Non-critical — don't block on audit log failure
@@ -284,7 +402,8 @@ async function main() {
 
   // ------- PostToolUse: audit log only -------
   if (hookEvent === 'PostToolUse' || hookEvent === 'PostToolUseFailure') {
-    writeAuditLog(input, null);
+    const skillName = inferInitiatingSkill(input.transcript_path);
+    writeAuditLog(input, null, skillName);
     process.exit(0);
   }
 
@@ -297,16 +416,21 @@ async function main() {
     process.exit(0);
   }
 
+  // Extract the initiating skill from the envelope we just built
+  const initiatingSkill = envelope.context.initiating_skill || null;
+
   // Quick check for sensitive file paths (Write/Edit)
   if (
     (input.tool_name === 'Write' || input.tool_name === 'Edit') &&
     isSensitivePath(input.tool_input?.file_path)
   ) {
-    const reason = `GoPlus AgentGuard: blocked write to sensitive path "${input.tool_input.file_path}"`;
-    writeAuditLog(input, { decision: 'deny', risk_level: 'critical', risk_tags: ['SENSITIVE_PATH'] });
+    const skillTag = initiatingSkill ? ` (via skill: ${initiatingSkill})` : '';
+    const reason = `GoPlus AgentGuard: blocked write to sensitive path "${input.tool_input.file_path}"${skillTag}`;
+    writeAuditLog(input, { decision: 'deny', risk_level: 'critical', risk_tags: ['SENSITIVE_PATH'] }, initiatingSkill);
 
-    if (config.level === 'permissive') {
-      // In permissive mode, ask instead of deny
+    if (config.level === 'permissive' && !initiatingSkill) {
+      // In permissive mode, ask instead of deny — but only for direct user actions.
+      // Skill-initiated writes to sensitive paths are always denied.
       console.log(JSON.stringify({
         hookSpecificOutput: {
           hookEventName: 'PreToolUse',
@@ -323,21 +447,57 @@ async function main() {
 
   // Full ActionScanner evaluation
   try {
-    const { actionScanner } = createAgentGuard();
+    const agentguard = createAgentGuard();
+    const { actionScanner } = agentguard;
     const decision = await actionScanner.decide(envelope);
 
+    // If a skill initiated this action, apply skill trust policy
+    if (initiatingSkill) {
+      const policy = await getSkillTrustPolicy(initiatingSkill, agentguard);
+
+      // Unknown/untrusted skill: escalate protection
+      if (!policy.isKnown || policy.trustLevel === 'untrusted') {
+        // Check if this action type exceeds default (none) capabilities
+        if (!isActionAllowedByCapabilities(envelope.action.type, { can_exec: false, can_network: false, can_write: false, can_read: true, can_web3: false })) {
+          const reason = `GoPlus AgentGuard: untrusted skill "${initiatingSkill}" attempted ${envelope.action.type} — register it with /agentguard trust attest to allow`;
+          writeAuditLog(input, { decision: 'deny', risk_level: 'high', risk_tags: ['UNTRUSTED_SKILL', ...decision.risk_tags] }, initiatingSkill);
+          // Ask user instead of hard deny — let them decide
+          console.log(JSON.stringify({
+            hookSpecificOutput: {
+              hookEventName: 'PreToolUse',
+              permissionDecision: 'ask',
+              permissionDecisionReason: reason,
+            },
+          }));
+          process.exit(0);
+        }
+      }
+
+      // Registered skill with restricted capabilities: enforce them
+      if (policy.isKnown && policy.capabilities) {
+        if (!isActionAllowedByCapabilities(envelope.action.type, policy.capabilities)) {
+          const reason = `GoPlus AgentGuard: skill "${initiatingSkill}" is not allowed to ${envelope.action.type} per its trust policy`;
+          writeAuditLog(input, { decision: 'deny', risk_level: 'high', risk_tags: ['CAPABILITY_EXCEEDED', ...decision.risk_tags] }, initiatingSkill);
+          process.stderr.write(reason + '\n');
+          process.exit(2);
+        }
+      }
+    }
+
     // Write audit log
-    writeAuditLog(input, decision);
+    writeAuditLog(input, decision, initiatingSkill);
 
     // Determine action based on protection level
     if (shouldDenyAtLevel(decision, config)) {
-      const reason = `GoPlus AgentGuard: ${decision.explanation || 'Action blocked'} [${(decision.risk_tags || []).join(', ')}]`;
+      const skillTag = initiatingSkill ? ` (via skill: ${initiatingSkill})` : '';
+      const reason = `GoPlus AgentGuard: ${decision.explanation || 'Action blocked'}${skillTag} [${(decision.risk_tags || []).join(', ')}]`;
       process.stderr.write(reason + '\n');
       process.exit(2);
     }
 
     if (shouldAskAtLevel(decision, config)) {
-      const reason = `GoPlus AgentGuard: ${decision.explanation || 'Action requires confirmation'} [${(decision.risk_tags || []).join(', ')}]`;
+      const skillTag = initiatingSkill ? ` (via skill: ${initiatingSkill})` : '';
+      const reason = `GoPlus AgentGuard: ${decision.explanation || 'Action requires confirmation'}${skillTag} [${(decision.risk_tags || []).join(', ')}]`;
       console.log(JSON.stringify({
         hookSpecificOutput: {
           hookEventName: 'PreToolUse',
@@ -352,7 +512,7 @@ async function main() {
     process.exit(0);
   } catch (err) {
     // ActionScanner error — fail open (allow) but log
-    writeAuditLog(input, { decision: 'error', risk_level: 'low', risk_tags: ['ENGINE_ERROR'] });
+    writeAuditLog(input, { decision: 'error', risk_level: 'low', risk_tags: ['ENGINE_ERROR'] }, initiatingSkill);
     process.exit(0);
   }
 }

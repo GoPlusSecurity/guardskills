@@ -133,6 +133,8 @@ export interface ActionContext {
   env: 'prod' | 'dev' | 'test';
   /** Action timestamp */
   time: string;
+  /** Skill that initiated this action (inferred from transcript) */
+  initiating_skill?: string;
 }
 
 /**
