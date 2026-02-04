@@ -7,3 +7,4 @@ dist/
 coverage/
 *.tgz
 skills/guardskills/scripts/data/
+skills/guardskills/scripts/package-lock.json

@@ -87,6 +87,30 @@ For each rule, use Grep to search the relevant file types. Record every match wi
 <Human-readable summary of key risks, impact, and recommendations>
 ```
 
+### Post-Scan Trust Registration
+
+After outputting the scan report, if the scanned target appears to be a skill (contains a `SKILL.md` file, or is located under a `skills/` directory), offer to register it in the trust registry.
+
+**Risk-to-trust mapping**:
+
+| Scan Risk Level | Suggested Trust Level | Preset | Action |
+|---|---|---|---|
+| LOW | `trusted` | `read_only` | Offer to register |
+| MEDIUM | `restricted` | `none` | Offer to register with warning |
+| HIGH / CRITICAL | — | — | Warn the user; do not suggest registration |
+
+**Registration steps** (if the user agrees):
+
+1. Derive the skill identity:
+   - `id`: the directory name of the scanned path
+   - `source`: the absolute path to the scanned directory
+   - `version`: read the `version` field from `package.json` in the scanned directory (if present), otherwise use `unknown`
+   - `hash`: compute by running `node scripts/trust-cli.ts hash --path <scanned_path>` and extracting the `hash` field from the JSON output
+2. Register via: `node scripts/trust-cli.ts attest --id <id> --source <source> --version <version> --hash <hash> --trust-level <level> --preset <preset> --reviewed-by guardskills-scan --notes "Auto-registered after scan. Risk level: <risk_level>." --force`
+3. Show the registration result to the user.
+
+If scripts are not available (e.g., `npm install` was not run), skip this step and suggest the user run `cd skills/guardskills/scripts && npm install`.
+
 ---
 
 ## Subcommand: action

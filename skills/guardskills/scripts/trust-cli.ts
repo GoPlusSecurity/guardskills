@@ -8,10 +8,12 @@
  *   node trust-cli.ts attest  --id <id> --source <source> --version <version> --hash <hash> --trust-level <level> [--preset <preset>] [--capabilities <json>] [--reviewed-by <name>] [--notes <text>] [--expires <iso>] [--force]
  *   node trust-cli.ts revoke  [--source <source>] [--key <record_key>] --reason <reason>
  *   node trust-cli.ts list    [--trust-level <level>] [--status <status>] [--source-pattern <pattern>]
+ *   node trust-cli.ts hash    --path <dir>
  */
 
 import { createGuardSkills } from 'guardskills';
 import { CAPABILITY_PRESETS } from 'guardskills/dist/policy/default.js';
+import { SkillScanner } from 'guardskills/dist/scanner/index.js';
 
 const args = process.argv.slice(2);
 const command = args[0];
@@ -107,9 +109,21 @@ async function main() {
       break;
     }
 
+    case 'hash': {
+      const dirPath = getArg('path');
+      if (!dirPath) {
+        console.error('Error: --path is required for hash');
+        process.exit(1);
+      }
+      const scanner = new SkillScanner({ useExternalScanner: false });
+      const hash = await scanner.calculateArtifactHash(dirPath);
+      console.log(JSON.stringify({ hash }));
+      break;
+    }
+
     default:
       console.error(
-        'Usage: trust-cli.ts <lookup|attest|revoke|list> [options]'
+        'Usage: trust-cli.ts <lookup|attest|revoke|list|hash> [options]'
       );
       console.error('Run with --help for details.');
       process.exit(1);
