@@ -1,6 +1,6 @@
-# AgentGuard Evaluation Scenarios
+# GoPlus AgentGuard Evaluation Scenarios
 
-These scenarios verify that AgentGuard correctly detects threats and handles commands.
+These scenarios verify that GoPlus AgentGuard correctly detects threats and handles commands.
 
 ## Scenario 1: Scan Vulnerable Code
 

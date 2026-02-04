@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# AgentGuard — One-click setup
-# Installs AgentGuard as a Claude Code skill with automatic security hooks.
+# GoPlus AgentGuard — One-click setup
+# Installs GoPlus AgentGuard as a Claude Code skill with automatic security hooks.
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 AGENTGUARD_DIR="$HOME/.agentguard"
@@ -11,14 +11,14 @@ SKILLS_DIR="$CLAUDE_DIR/skills/agentguard"
 MIN_NODE_VERSION=18
 
 echo ""
-echo "  AgentGuard — AI Agent Security Guard"
-echo "  ======================================"
+echo "  GoPlus AgentGuard — AI Agent Security Guard"
+echo "  ============================================="
 echo ""
 
 # ---- Pre-check: Node.js ----
 if ! command -v node &>/dev/null; then
   echo "  ERROR: Node.js is not installed."
-  echo "  AgentGuard requires Node.js >= $MIN_NODE_VERSION."
+  echo "  GoPlus AgentGuard requires Node.js >= $MIN_NODE_VERSION."
   echo "  Install from: https://nodejs.org"
   exit 1
 fi
@@ -26,7 +26,7 @@ fi
 NODE_MAJOR=$(node -e "console.log(process.versions.node.split('.')[0])")
 if [ "$NODE_MAJOR" -lt "$MIN_NODE_VERSION" ]; then
   echo "  ERROR: Node.js v$(node -v) is too old."
-  echo "  AgentGuard requires Node.js >= $MIN_NODE_VERSION."
+  echo "  GoPlus AgentGuard requires Node.js >= $MIN_NODE_VERSION."
   echo "  Install from: https://nodejs.org"
   exit 1
 fi
@@ -38,11 +38,11 @@ fi
 
 # ---- Uninstall mode ----
 if [ "${1:-}" = "--uninstall" ] || [ "${1:-}" = "uninstall" ]; then
-  echo "  Uninstalling AgentGuard..."
+  echo "  Uninstalling GoPlus AgentGuard..."
   rm -rf "$SKILLS_DIR" 2>/dev/null && echo "  Removed skill from $SKILLS_DIR" || true
   rm -rf "$AGENTGUARD_DIR" 2>/dev/null && echo "  Removed config from $AGENTGUARD_DIR" || true
   echo ""
-  echo "  AgentGuard has been uninstalled."
+  echo "  GoPlus AgentGuard has been uninstalled."
   echo "  If you added it as a Claude Code plugin, also run:"
   echo "    claude plugin remove agentguard"
   echo ""
@@ -50,7 +50,7 @@ if [ "${1:-}" = "--uninstall" ] || [ "${1:-}" = "uninstall" ]; then
 fi
 
 # ---- Step 1: Build the project ----
-echo "[1/4] Building AgentGuard..."
+echo "[1/4] Building GoPlus AgentGuard..."
 if [ -f "$SCRIPT_DIR/package.json" ]; then
   cd "$SCRIPT_DIR"
   npm install --ignore-scripts 2>/dev/null
@@ -93,7 +93,7 @@ fi
 echo ""
 echo "  Setup complete!"
 echo ""
-echo "  Your AI agent is now protected by AgentGuard."
+echo "  Your AI agent is now protected by GoPlus AgentGuard."
 echo ""
 echo "  Usage:"
 echo "    /agentguard scan <path>    Scan code for security risks"

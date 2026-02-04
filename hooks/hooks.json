@@ -8,7 +8,7 @@
             "type": "command",
             "command": "node \"${CLAUDE_PLUGIN_ROOT}/skills/agentguard/scripts/guard-hook.js\"",
             "timeout": 10,
-            "statusMessage": "AgentGuard: checking command safety..."
+            "statusMessage": "GoPlus AgentGuard: checking command safety..."
           }
         ]
       },
@@ -19,7 +19,7 @@
             "type": "command",
             "command": "node \"${CLAUDE_PLUGIN_ROOT}/skills/agentguard/scripts/guard-hook.js\"",
             "timeout": 10,
-            "statusMessage": "AgentGuard: checking file write safety..."
+            "statusMessage": "GoPlus AgentGuard: checking file write safety..."
           }
         ]
       },
@@ -30,7 +30,7 @@
             "type": "command",
             "command": "node \"${CLAUDE_PLUGIN_ROOT}/skills/agentguard/scripts/guard-hook.js\"",
             "timeout": 10,
-            "statusMessage": "AgentGuard: checking network request..."
+            "statusMessage": "GoPlus AgentGuard: checking network request..."
           }
         ]
       }

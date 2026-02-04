@@ -1,7 +1,7 @@
 {
   "name": "agentguard",
   "version": "1.0.0",
-  "description": "Security guard for AI agents. Blocks dangerous commands, prevents data leaks, protects secrets. 20 detection rules, runtime action evaluation, trust registry.",
+  "description": "GoPlus AgentGuard — Security guard for AI agents. Blocks dangerous commands, prevents data leaks, protects secrets. 20 detection rules, runtime action evaluation, trust registry.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "bin": {

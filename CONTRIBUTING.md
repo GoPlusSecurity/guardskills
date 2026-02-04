@@ -1,6 +1,6 @@
-# Contributing to AgentGuard
+# Contributing to GoPlus AgentGuard
 
-Thanks for your interest in contributing to AgentGuard! Here's how to get started.
+Thanks for your interest in contributing to GoPlus AgentGuard! Here's how to get started.
 
 ## Development Setup
 

@@ -1,8 +1,8 @@
-# AgentGuard
+# GoPlus AgentGuard
 
 **Security guard for your AI agent.** Automatically blocks dangerous commands, prevents data leaks, and protects your secrets.
 
-Your AI agent can execute `rm -rf /`, read your SSH keys, and send passwords to Discord. AgentGuard stops all of that.
+Your AI agent can execute `rm -rf /`, read your SSH keys, and send passwords to Discord. GoPlus AgentGuard stops all of that.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Node.js](https://img.shields.io/badge/node-%3E%3D18-green.svg)](https://nodejs.org)
@@ -11,9 +11,9 @@ Your AI agent can execute `rm -rf /`, read your SSH keys, and send passwords to 
 
 ## What It Does
 
-AgentGuard protects your AI coding agent with two layers:
+GoPlus AgentGuard protects your AI coding agent with two layers:
 
-**Layer 1 — Automatic Guard (hooks)**: Install once, forget about it. AgentGuard intercepts dangerous tool calls in real time:
+**Layer 1 — Automatic Guard (hooks)**: Install once, forget about it. GoPlus AgentGuard intercepts dangerous tool calls in real time:
 - Blocks `rm -rf /`, fork bombs, `curl | bash` and other destructive commands
 - Prevents writes to `.env`, `.ssh/`, credentials files
 - Detects data exfiltration to Discord/Telegram/Slack webhooks
@@ -27,7 +27,7 @@ AgentGuard protects your AI coding agent with two layers:
 
 ## Compatibility
 
-AgentGuard follows the [Agent Skills](https://agentskills.io) open standard and works with:
+GoPlus AgentGuard follows the [Agent Skills](https://agentskills.io) open standard and works with:
 
 | Platform | Support |
 |----------|---------|
@@ -51,7 +51,7 @@ cd agentguard && ./setup.sh
 
 This installs the skill, builds the project, and configures your protection level.
 
-To enable automatic hook protection, add AgentGuard as a Claude Code plugin:
+To enable automatic hook protection, add GoPlus AgentGuard as a Claude Code plugin:
 
 ```bash
 claude plugin add /path/to/agentguard
@@ -194,7 +194,7 @@ Get keys at: https://gopluslabs.io/security-api
 
 ### External Scanner
 
-AgentGuard integrates with [cisco-ai-defense/skill-scanner](https://github.com/cisco-ai-defense/skill-scanner) for YAML/YARA patterns, Python AST analysis, and VirusTotal integration:
+GoPlus AgentGuard integrates with [cisco-ai-defense/skill-scanner](https://github.com/cisco-ai-defense/skill-scanner) for YAML/YARA patterns, Python AST analysis, and VirusTotal integration:
 
 ```bash
 pip install cisco-ai-skill-scanner
@@ -239,4 +239,4 @@ npm install && npm run build && npm test
 
 Contributions welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
-Built by [GoPlusSecurity](https://github.com/GoPlusSecurity).
+Built by [GoPlus Security](https://gopluslabs.io).

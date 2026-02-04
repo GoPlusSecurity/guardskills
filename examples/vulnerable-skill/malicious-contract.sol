@@ -5,7 +5,7 @@ pragma solidity ^0.8.0;
  * DEMO: Vulnerable Smart Contract
  *
  * This contract contains intentionally vulnerable patterns
- * for demonstrating AgentGuard' Web3 security scanning.
+ * for demonstrating GoPlus AgentGuard's Web3 security scanning.
  *
  * DO NOT deploy this contract. Every pattern here is a security risk.
  *

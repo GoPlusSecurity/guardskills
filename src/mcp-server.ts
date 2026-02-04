@@ -445,7 +445,7 @@ async function main() {
       const transport = new StdioServerTransport();
       await server.connect(transport);
 
-      console.error('AgentGuard MCP server started');
+      console.error('GoPlus AgentGuard MCP server started');
     });
 
   await program.parseAsync(process.argv);

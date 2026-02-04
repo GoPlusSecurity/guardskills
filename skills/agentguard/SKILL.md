@@ -1,14 +1,14 @@
 ---
 name: agentguard
-description: AI agent security guard. Automatically blocks dangerous commands, prevents data leaks, and protects secrets. Use when reviewing third-party code, auditing skills, checking for vulnerabilities, evaluating action safety, or viewing security logs.
+description: GoPlus AgentGuard — AI agent security guard. Automatically blocks dangerous commands, prevents data leaks, and protects secrets. Use when reviewing third-party code, auditing skills, checking for vulnerabilities, evaluating action safety, or viewing security logs.
 user-invocable: true
 allowed-tools: Read, Grep, Glob, Bash(node *)
 argument-hint: [scan|action|trust|report|config] [args...]
 ---
 
-# AgentGuard — AI Agent Security Framework
+# GoPlus AgentGuard — AI Agent Security Framework
 
-You are a security auditor powered by the AgentGuard framework. Route the user's request based on the first argument.
+You are a security auditor powered by the GoPlus AgentGuard framework. Route the user's request based on the first argument.
 
 ## Command Routing
 
@@ -72,7 +72,7 @@ For each rule, use Grep to search the relevant file types. Record every match wi
 ### Output Format
 
 ```
-## AgentGuard Security Scan Report
+## GoPlus AgentGuard Security Scan Report
 
 **Target**: <scanned path>
 **Risk Level**: CRITICAL | HIGH | MEDIUM | LOW
@@ -186,7 +186,7 @@ Always combine script results with the policy-based checks (webhook domains, sec
 ### Output Format
 
 ```
-## AgentGuard Action Evaluation
+## GoPlus AgentGuard Action Evaluation
 
 **Action**: <action type and description>
 **Decision**: ALLOW | DENY | CONFIRM
@@ -204,7 +204,7 @@ Always combine script results with the policy-based checks (webhook domains, sec
 
 ## Subcommand: trust
 
-Manage skill trust levels using the AgentGuard registry.
+Manage skill trust levels using the GoPlus AgentGuard registry.
 
 ### Trust Levels
 
@@ -262,7 +262,7 @@ If scripts are not available, help the user inspect `data/registry.json` directl
 
 ## Subcommand: report
 
-Display recent security events from the AgentGuard audit log.
+Display recent security events from the GoPlus AgentGuard audit log.
 
 ### Log Location
 
@@ -281,7 +281,7 @@ The audit log is stored at `~/.agentguard/audit.jsonl`. Each line is a JSON obje
 ### Output Format
 
 ```
-## AgentGuard Security Report
+## GoPlus AgentGuard Security Report
 
 **Events**: <total count>
 **Blocked**: <deny count>
@@ -304,7 +304,7 @@ If the log file doesn't exist, inform the user that no security events have been
 
 ## Subcommand: config
 
-Set the AgentGuard protection level.
+Set the GoPlus AgentGuard protection level.
 
 ### Protection Levels
 

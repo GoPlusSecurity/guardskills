@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 /**
- * AgentGuard PreToolUse / PostToolUse Hook
+ * GoPlus AgentGuard PreToolUse / PostToolUse Hook
  *
  * Reads Claude Code hook input from stdin, evaluates safety via ActionScanner,
  * and returns allow / deny / ask decisions.
@@ -33,7 +33,7 @@ try {
     createAgentGuard = gs.createAgentGuard || gs.default;
   } catch {
     // Cannot load agentguard — allow everything and warn
-    process.stderr.write('AgentGuard: unable to load engine, allowing action\n');
+    process.stderr.write('GoPlus AgentGuard: unable to load engine, allowing action\n');
     process.exit(0);
   }
 }
@@ -302,7 +302,7 @@ async function main() {
     (input.tool_name === 'Write' || input.tool_name === 'Edit') &&
     isSensitivePath(input.tool_input?.file_path)
   ) {
-    const reason = `AgentGuard: blocked write to sensitive path "${input.tool_input.file_path}"`;
+    const reason = `GoPlus AgentGuard: blocked write to sensitive path "${input.tool_input.file_path}"`;
     writeAuditLog(input, { decision: 'deny', risk_level: 'critical', risk_tags: ['SENSITIVE_PATH'] });
 
     if (config.level === 'permissive') {
@@ -331,13 +331,13 @@ async function main() {
 
     // Determine action based on protection level
     if (shouldDenyAtLevel(decision, config)) {
-      const reason = `AgentGuard: ${decision.explanation || 'Action blocked'} [${(decision.risk_tags || []).join(', ')}]`;
+      const reason = `GoPlus AgentGuard: ${decision.explanation || 'Action blocked'} [${(decision.risk_tags || []).join(', ')}]`;
       process.stderr.write(reason + '\n');
       process.exit(2);
     }
 
     if (shouldAskAtLevel(decision, config)) {
-      const reason = `AgentGuard: ${decision.explanation || 'Action requires confirmation'} [${(decision.risk_tags || []).join(', ')}]`;
+      const reason = `GoPlus AgentGuard: ${decision.explanation || 'Action requires confirmation'} [${(decision.risk_tags || []).join(', ')}]`;
       console.log(JSON.stringify({
         hookSpecificOutput: {
           hookEventName: 'PreToolUse',

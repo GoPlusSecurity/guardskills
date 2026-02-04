@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 /**
- * AgentGuard Action CLI — lightweight wrapper for ActionScanner operations.
+ * GoPlus AgentGuard Action CLI — lightweight wrapper for ActionScanner operations.
  *
  * Usage:
  *   node action-cli.ts decide --type <action_type> [action-specific args]

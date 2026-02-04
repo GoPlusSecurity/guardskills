@@ -1,6 +1,6 @@
 # Vulnerable Skill Demo
 
-This directory contains intentionally vulnerable code for testing AgentGuard security scanning.
+This directory contains intentionally vulnerable code for testing GoPlus AgentGuard security scanning.
 
 **DO NOT use any code from this directory in production.**
 
@@ -10,7 +10,7 @@ This directory contains intentionally vulnerable code for testing AgentGuard sec
 /agentguard scan examples/vulnerable-skill
 ```
 
-## What AgentGuard Should Detect
+## What GoPlus AgentGuard Should Detect
 
 ### JavaScript (`malicious-helper.js`)
 - `SHELL_EXEC` — child_process exec
