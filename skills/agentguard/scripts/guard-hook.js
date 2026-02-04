@@ -1,0 +1,360 @@
+#!/usr/bin/env node
+
+/**
+ * AgentGuard PreToolUse / PostToolUse Hook
+ *
+ * Reads Claude Code hook input from stdin, evaluates safety via ActionScanner,
+ * and returns allow / deny / ask decisions.
+ *
+ * PreToolUse exit codes:
+ *   0  = allow (or JSON with permissionDecision)
+ *   2  = deny  (stderr = reason shown to Claude)
+ *
+ * PostToolUse: appends audit log entry to ~/.agentguard/audit.jsonl (async, always exits 0)
+ */
+
+import { createRequire } from 'node:module';
+import { readFileSync, appendFileSync, mkdirSync, existsSync } from 'node:fs';
+import { join } from 'node:path';
+import { homedir } from 'node:os';
+
+// Resolve agentguard from the parent package
+const require = createRequire(import.meta.url);
+const agentguardPath = join(import.meta.url.replace('file://', ''), '..', '..', '..', '..', 'dist', 'index.js');
+
+let createAgentGuard;
+try {
+  const gs = await import(agentguardPath);
+  createAgentGuard = gs.createAgentGuard || gs.default;
+} catch {
+  // Fallback: try to require from node_modules
+  try {
+    const gs = await import('agentguard');
+    createAgentGuard = gs.createAgentGuard || gs.default;
+  } catch {
+    // Cannot load agentguard — allow everything and warn
+    process.stderr.write('AgentGuard: unable to load engine, allowing action\n');
+    process.exit(0);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Config
+// ---------------------------------------------------------------------------
+
+const AGENTGUARD_DIR = join(homedir(), '.agentguard');
+const CONFIG_PATH = join(AGENTGUARD_DIR, 'config.json');
+const AUDIT_PATH = join(AGENTGUARD_DIR, 'audit.jsonl');
+
+function ensureDir() {
+  if (!existsSync(AGENTGUARD_DIR)) {
+    mkdirSync(AGENTGUARD_DIR, { recursive: true });
+  }
+}
+
+function loadConfig() {
+  try {
+    return JSON.parse(readFileSync(CONFIG_PATH, 'utf-8'));
+  } catch {
+    return { level: 'balanced' };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Read stdin
+// ---------------------------------------------------------------------------
+
+function readStdin() {
+  return new Promise((resolve) => {
+    let data = '';
+    process.stdin.setEncoding('utf-8');
+    process.stdin.on('data', (chunk) => (data += chunk));
+    process.stdin.on('end', () => {
+      try {
+        resolve(JSON.parse(data));
+      } catch {
+        resolve(null);
+      }
+    });
+    // Timeout after 5s to avoid hanging
+    setTimeout(() => resolve(null), 5000);
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Map Claude Code tool calls to ActionScanner envelopes
+// ---------------------------------------------------------------------------
+
+function buildEnvelope(input) {
+  const toolName = input.tool_name || '';
+  const toolInput = input.tool_input || {};
+
+  const actor = {
+    skill: {
+      id: 'claude-code-session',
+      source: 'claude-code',
+      version_ref: '0.0.0',
+      artifact_hash: '',
+    },
+  };
+
+  const context = {
+    session_id: input.session_id || `hook-${Date.now()}`,
+    user_present: true, // Claude Code = interactive session
+    env: 'prod',
+    time: new Date().toISOString(),
+  };
+
+  // Bash → exec_command
+  if (toolName === 'Bash') {
+    return {
+      actor,
+      action: {
+        type: 'exec_command',
+        data: {
+          command: toolInput.command || '',
+          args: [],
+          cwd: input.cwd,
+        },
+      },
+      context,
+    };
+  }
+
+  // Write / Edit → write_file
+  if (toolName === 'Write' || toolName === 'Edit') {
+    const filePath = toolInput.file_path || '';
+    return {
+      actor,
+      action: {
+        type: 'write_file',
+        data: { path: filePath },
+      },
+      context,
+    };
+  }
+
+  // WebFetch / WebSearch → network_request
+  if (toolName === 'WebFetch' || toolName === 'WebSearch') {
+    const url = toolInput.url || toolInput.query || '';
+    return {
+      actor,
+      action: {
+        type: 'network_request',
+        data: {
+          method: 'GET',
+          url,
+        },
+      },
+      context,
+    };
+  }
+
+  // MCP tools that look like network requests
+  if (toolName.startsWith('mcp__') && toolInput.url) {
+    return {
+      actor,
+      action: {
+        type: 'network_request',
+        data: {
+          method: toolInput.method || 'GET',
+          url: toolInput.url,
+          body_preview: toolInput.body,
+        },
+      },
+      context,
+    };
+  }
+
+  return null; // Not a tool we care about
+}
+
+// ---------------------------------------------------------------------------
+// Sensitive path detection (fast check before full ActionScanner)
+// ---------------------------------------------------------------------------
+
+const SENSITIVE_PATHS = [
+  '.env', '.env.local', '.env.production',
+  '.ssh/', 'id_rsa', 'id_ed25519',
+  '.aws/credentials', '.aws/config',
+  '.npmrc', '.netrc',
+  'credentials.json', 'serviceAccountKey.json',
+  '.kube/config',
+];
+
+function isSensitivePath(filePath) {
+  if (!filePath) return false;
+  const normalized = filePath.replace(/\\/g, '/');
+  return SENSITIVE_PATHS.some(
+    (p) => normalized.includes(`/${p}`) || normalized.endsWith(p)
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Protection level thresholds
+// ---------------------------------------------------------------------------
+
+function shouldDenyAtLevel(decision, config) {
+  const level = config.level || 'balanced';
+
+  // In strict mode, deny anything that's not explicitly allowed
+  if (level === 'strict') {
+    return decision.decision === 'deny' || decision.decision === 'confirm';
+  }
+
+  // In balanced mode (default), deny 'deny' decisions, ask for 'confirm'
+  if (level === 'balanced') {
+    return decision.decision === 'deny';
+  }
+
+  // In permissive mode, only deny critical
+  if (level === 'permissive') {
+    return decision.decision === 'deny' && decision.risk_level === 'critical';
+  }
+
+  return decision.decision === 'deny';
+}
+
+function shouldAskAtLevel(decision, config) {
+  const level = config.level || 'balanced';
+
+  if (level === 'strict') {
+    // In strict mode, we already deny confirm decisions above
+    return false;
+  }
+
+  if (level === 'balanced') {
+    return decision.decision === 'confirm';
+  }
+
+  if (level === 'permissive') {
+    // In permissive, ask only for high/critical that aren't already denied
+    return (
+      decision.decision === 'deny' && decision.risk_level !== 'critical'
+    ) || (
+      decision.decision === 'confirm' &&
+      (decision.risk_level === 'high' || decision.risk_level === 'critical')
+    );
+  }
+
+  return decision.decision === 'confirm';
+}
+
+// ---------------------------------------------------------------------------
+// Audit logging
+// ---------------------------------------------------------------------------
+
+function writeAuditLog(input, decision) {
+  try {
+    ensureDir();
+    const entry = {
+      timestamp: new Date().toISOString(),
+      tool_name: input.tool_name,
+      tool_input_summary: summarizeToolInput(input),
+      decision: decision?.decision || 'allow',
+      risk_level: decision?.risk_level || 'low',
+      risk_tags: decision?.risk_tags || [],
+    };
+    appendFileSync(AUDIT_PATH, JSON.stringify(entry) + '\n');
+  } catch {
+    // Non-critical — don't block on audit log failure
+  }
+}
+
+function summarizeToolInput(input) {
+  const toolInput = input.tool_input || {};
+  if (input.tool_name === 'Bash') return toolInput.command?.slice(0, 200) || '';
+  if (input.tool_name === 'Write' || input.tool_name === 'Edit') return toolInput.file_path || '';
+  if (input.tool_name === 'WebFetch') return toolInput.url || '';
+  if (input.tool_name === 'WebSearch') return toolInput.query || '';
+  return JSON.stringify(toolInput).slice(0, 200);
+}
+
+// ---------------------------------------------------------------------------
+// Main
+// ---------------------------------------------------------------------------
+
+async function main() {
+  const input = await readStdin();
+  if (!input) {
+    process.exit(0); // Can't parse → allow
+  }
+
+  const hookEvent = input.hook_event_name || '';
+
+  // ------- PostToolUse: audit log only -------
+  if (hookEvent === 'PostToolUse' || hookEvent === 'PostToolUseFailure') {
+    writeAuditLog(input, null);
+    process.exit(0);
+  }
+
+  // ------- PreToolUse: evaluate safety -------
+  const config = loadConfig();
+  const envelope = buildEnvelope(input);
+
+  if (!envelope) {
+    // Not a tool we guard — allow
+    process.exit(0);
+  }
+
+  // Quick check for sensitive file paths (Write/Edit)
+  if (
+    (input.tool_name === 'Write' || input.tool_name === 'Edit') &&
+    isSensitivePath(input.tool_input?.file_path)
+  ) {
+    const reason = `AgentGuard: blocked write to sensitive path "${input.tool_input.file_path}"`;
+    writeAuditLog(input, { decision: 'deny', risk_level: 'critical', risk_tags: ['SENSITIVE_PATH'] });
+
+    if (config.level === 'permissive') {
+      // In permissive mode, ask instead of deny
+      console.log(JSON.stringify({
+        hookSpecificOutput: {
+          hookEventName: 'PreToolUse',
+          permissionDecision: 'ask',
+          permissionDecisionReason: reason,
+        },
+      }));
+      process.exit(0);
+    }
+
+    process.stderr.write(reason + '\n');
+    process.exit(2);
+  }
+
+  // Full ActionScanner evaluation
+  try {
+    const { actionScanner } = createAgentGuard();
+    const decision = await actionScanner.decide(envelope);
+
+    // Write audit log
+    writeAuditLog(input, decision);
+
+    // Determine action based on protection level
+    if (shouldDenyAtLevel(decision, config)) {
+      const reason = `AgentGuard: ${decision.explanation || 'Action blocked'} [${(decision.risk_tags || []).join(', ')}]`;
+      process.stderr.write(reason + '\n');
+      process.exit(2);
+    }
+
+    if (shouldAskAtLevel(decision, config)) {
+      const reason = `AgentGuard: ${decision.explanation || 'Action requires confirmation'} [${(decision.risk_tags || []).join(', ')}]`;
+      console.log(JSON.stringify({
+        hookSpecificOutput: {
+          hookEventName: 'PreToolUse',
+          permissionDecision: 'ask',
+          permissionDecisionReason: reason,
+        },
+      }));
+      process.exit(0);
+    }
+
+    // Allow
+    process.exit(0);
+  } catch (err) {
+    // ActionScanner error — fail open (allow) but log
+    writeAuditLog(input, { decision: 'error', risk_level: 'low', risk_tags: ['ENGINE_ERROR'] });
+    process.exit(0);
+  }
+}
+
+main();

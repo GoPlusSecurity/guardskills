@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 /**
- * GuardSkills Trust CLI — lightweight wrapper for SkillRegistry operations.
+ * AgentGuard Trust CLI — lightweight wrapper for SkillRegistry operations.
  *
  * Usage:
  *   node trust-cli.ts lookup --id <id> --source <source> --version <version> --hash <hash>
@@ -11,9 +11,9 @@
  *   node trust-cli.ts hash    --path <dir>
  */
 
-import { createGuardSkills } from 'guardskills';
-import { CAPABILITY_PRESETS } from 'guardskills/dist/policy/default.js';
-import { SkillScanner } from 'guardskills/dist/scanner/index.js';
+import { createAgentGuard } from 'agentguard';
+import { CAPABILITY_PRESETS } from 'agentguard/dist/policy/default.js';
+import { SkillScanner } from 'agentguard/dist/scanner/index.js';
 
 const args = process.argv.slice(2);
 const command = args[0];
@@ -30,7 +30,7 @@ function hasFlag(name: string): boolean {
 
 async function main() {
   const registryPath = getArg('registry-path');
-  const { registry } = createGuardSkills({ registryPath });
+  const { registry } = createAgentGuard({ registryPath });
 
   switch (command) {
     case 'lookup': {

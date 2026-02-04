@@ -1,14 +1,14 @@
 ---
-name: guardskills
-description: AI agent security framework. Scan code for security risks, evaluate runtime action safety, and manage skill trust levels. Use when reviewing third-party code, auditing skills, checking for vulnerabilities, or evaluating action safety.
+name: agentguard
+description: AI agent security guard. Automatically blocks dangerous commands, prevents data leaks, and protects secrets. Use when reviewing third-party code, auditing skills, checking for vulnerabilities, evaluating action safety, or viewing security logs.
 user-invocable: true
 allowed-tools: Read, Grep, Glob, Bash(node *)
-argument-hint: [scan|action|trust] [args...]
+argument-hint: [scan|action|trust|report|config] [args...]
 ---
 
-# GuardSkills — AI Agent Security Framework
+# AgentGuard — AI Agent Security Framework
 
-You are a security auditor powered by the GuardSkills framework. Route the user's request based on the first argument.
+You are a security auditor powered by the AgentGuard framework. Route the user's request based on the first argument.
 
 ## Command Routing
 
@@ -17,6 +17,8 @@ Parse `$ARGUMENTS` to determine the subcommand:
 - **`scan <path>`** — Scan a skill or codebase for security risks
 - **`action <description>`** — Evaluate whether a runtime action is safe
 - **`trust <lookup|attest|revoke|list> [args]`** — Manage skill trust levels
+- **`report`** — View recent security events from the audit log
+- **`config <strict|balanced|permissive>`** — Set protection level
 
 If no subcommand is given, or the first argument is a path, default to **scan**.
 
@@ -70,7 +72,7 @@ For each rule, use Grep to search the relevant file types. Record every match wi
 ### Output Format
 
 ```
-## GuardSkills Security Scan Report
+## AgentGuard Security Scan Report
 
 **Target**: <scanned path>
 **Risk Level**: CRITICAL | HIGH | MEDIUM | LOW
@@ -106,10 +108,10 @@ After outputting the scan report, if the scanned target appears to be a skill (c
    - `source`: the absolute path to the scanned directory
    - `version`: read the `version` field from `package.json` in the scanned directory (if present), otherwise use `unknown`
    - `hash`: compute by running `node scripts/trust-cli.ts hash --path <scanned_path>` and extracting the `hash` field from the JSON output
-2. Register via: `node scripts/trust-cli.ts attest --id <id> --source <source> --version <version> --hash <hash> --trust-level <level> --preset <preset> --reviewed-by guardskills-scan --notes "Auto-registered after scan. Risk level: <risk_level>." --force`
+2. Register via: `node scripts/trust-cli.ts attest --id <id> --source <source> --version <version> --hash <hash> --trust-level <level> --preset <preset> --reviewed-by agentguard-scan --notes "Auto-registered after scan. Risk level: <risk_level>." --force`
 3. Show the registration result to the user.
 
-If scripts are not available (e.g., `npm install` was not run), skip this step and suggest the user run `cd skills/guardskills/scripts && npm install`.
+If scripts are not available (e.g., `npm install` was not run), skip this step and suggest the user run `cd skills/agentguard/scripts && npm install`.
 
 ---
 
@@ -184,7 +186,7 @@ Always combine script results with the policy-based checks (webhook domains, sec
 ### Output Format
 
 ```
-## GuardSkills Action Evaluation
+## AgentGuard Action Evaluation
 
 **Action**: <action type and description>
 **Decision**: ALLOW | DENY | CONFIRM
@@ -202,7 +204,7 @@ Always combine script results with the policy-based checks (webhook domains, sec
 
 ## Subcommand: trust
 
-Manage skill trust levels using the GuardSkills registry.
+Manage skill trust levels using the AgentGuard registry.
 
 ### Trust Levels
 
@@ -235,23 +237,92 @@ web3.tx_policy: 'allow' | 'confirm_high_risk' | 'deny'
 
 ### Operations
 
-**lookup** — `guardskills trust lookup --source <source> --version <version>`
+**lookup** — `agentguard trust lookup --source <source> --version <version>`
 Query the registry for a skill's trust record.
 
-**attest** — `guardskills trust attest --id <id> --source <source> --version <version> --hash <hash> --trust-level <level> --preset <preset> --reviewed-by <name>`
+**attest** — `agentguard trust attest --id <id> --source <source> --version <version> --hash <hash> --trust-level <level> --preset <preset> --reviewed-by <name>`
 Create or update a trust record. Use `--preset` for common capability models or provide `--capabilities <json>` for custom.
 
-**revoke** — `guardskills trust revoke --source <source> --reason <reason>`
+**revoke** — `agentguard trust revoke --source <source> --reason <reason>`
 Revoke trust for a skill. Supports `--source-pattern` for wildcards.
 
-**list** — `guardskills trust list [--trust-level <level>] [--status <status>]`
+**list** — `agentguard trust list [--trust-level <level>] [--status <status>]`
 List all trust records with optional filters.
 
 ### Script Execution
 
-If the guardskills package is installed, execute trust operations via:
+If the agentguard package is installed, execute trust operations via:
 ```
 node scripts/trust-cli.ts <subcommand> [args]
 ```
 
 If scripts are not available, help the user inspect `data/registry.json` directly using Read tool.
+
+---
+
+## Subcommand: report
+
+Display recent security events from the AgentGuard audit log.
+
+### Log Location
+
+The audit log is stored at `~/.agentguard/audit.jsonl`. Each line is a JSON object with:
+
+```json
+{"timestamp":"...","tool_name":"Bash","tool_input_summary":"rm -rf /","decision":"deny","risk_level":"critical","risk_tags":["DANGEROUS_COMMAND"]}
+```
+
+### How to Display
+
+1. Read `~/.agentguard/audit.jsonl` using the Read tool
+2. Parse each line as JSON
+3. Format as a table showing recent events (last 50 by default)
+
+### Output Format
+
+```
+## AgentGuard Security Report
+
+**Events**: <total count>
+**Blocked**: <deny count>
+**Confirmed**: <confirm count>
+
+### Recent Events
+
+| Time | Tool | Action | Decision | Risk | Tags |
+|------|------|--------|----------|------|------|
+| 2025-01-15 14:30 | Bash | rm -rf / | DENY | critical | DANGEROUS_COMMAND |
+| 2025-01-15 14:28 | Write | .env | CONFIRM | high | SENSITIVE_PATH |
+
+### Summary
+<Brief analysis of security posture and any patterns of concern>
+```
+
+If the log file doesn't exist, inform the user that no security events have been recorded yet, and suggest they enable hooks via `./setup.sh` or by adding the plugin.
+
+---
+
+## Subcommand: config
+
+Set the AgentGuard protection level.
+
+### Protection Levels
+
+| Level | Behavior |
+|-------|----------|
+| `strict` | Block all risky actions — every dangerous or suspicious command is denied |
+| `balanced` | Block dangerous, confirm risky — default level, good for daily use |
+| `permissive` | Only block critical threats — for experienced users who want minimal friction |
+
+### How to Set
+
+1. Read `$ARGUMENTS` to get the desired level
+2. Write the config to `~/.agentguard/config.json`:
+
+```json
+{"level": "balanced"}
+```
+
+3. Confirm the change to the user
+
+If no level is specified, read and display the current config.

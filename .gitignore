@@ -6,5 +6,5 @@ dist/
 .DS_Store
 coverage/
 *.tgz
-skills/guardskills/scripts/data/
-skills/guardskills/scripts/package-lock.json
+skills/agentguard/scripts/data/
+skills/agentguard/scripts/package-lock.json

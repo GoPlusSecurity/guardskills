@@ -1,5 +1,5 @@
 /**
- * GuardSkills - Security skill for AI agents
+ * AgentGuard - Security guard for AI agents
  *
  * Three-module security framework:
  * - Skill Scanner: Static analysis of skill code
@@ -50,9 +50,9 @@ import { SkillRegistry } from './registry/index.js';
 import { ActionScanner } from './action/index.js';
 
 /**
- * Create a complete GuardSkills instance with all modules
+ * Create a complete AgentGuard instance with all modules
  */
-export function createGuardSkills(options?: {
+export function createAgentGuard(options?: {
   registryPath?: string;
   useExternalScanner?: boolean;
 }) {
@@ -74,4 +74,8 @@ export function createGuardSkills(options?: {
 }
 
 // Default export
-export default createGuardSkills;
+// Backwards compatibility alias
+export const createGuardSkills = createAgentGuard;
+
+// Default export
+export default createAgentGuard;

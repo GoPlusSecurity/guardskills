@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 /**
- * GuardSkills Action CLI — lightweight wrapper for ActionScanner operations.
+ * AgentGuard Action CLI — lightweight wrapper for ActionScanner operations.
  *
  * Usage:
  *   node action-cli.ts decide --type <action_type> [action-specific args]
@@ -28,12 +28,12 @@
  *     --path <filepath>
  */
 
-import { createGuardSkills } from 'guardskills';
+import { createAgentGuard } from 'agentguard';
 import type {
   ActionEnvelope,
   Web3Intent,
   ActionType,
-} from 'guardskills';
+} from 'agentguard';
 
 const args = process.argv.slice(2);
 const command = args[0];
@@ -203,7 +203,7 @@ async function main() {
   }
 
   const registryPath = getArg('registry-path');
-  const { actionScanner } = createGuardSkills({ registryPath });
+  const { actionScanner } = createAgentGuard({ registryPath });
 
   switch (command) {
     case 'decide': {

@@ -1,11 +1,11 @@
 {
-  "name": "guardskills",
+  "name": "agentguard",
   "version": "1.0.0",
-  "description": "Security skill for AI agents - scan, registry, and action control",
+  "description": "Security guard for AI agents. Blocks dangerous commands, prevents data leaks, protects secrets. 20 detection rules, runtime action evaluation, trust registry.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "bin": {
-    "guardskills": "./dist/mcp-server.js"
+    "agentguard": "./dist/mcp-server.js"
   },
   "scripts": {
     "build": "tsc",
@@ -15,17 +15,24 @@
     "prepublishOnly": "npm run build"
   },
   "keywords": [
+    "claude-code-skill",
+    "agent-skills",
     "mcp",
     "security",
     "ai-agent",
     "web3",
-    "goplus"
+    "goplus",
+    "claude-code",
+    "codex",
+    "scanner",
+    "trust-registry",
+    "hooks"
   ],
   "author": "GoPlusSecurity",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/GoPlusSecurity/guardskills.git"
+    "url": "git+https://github.com/GoPlusSecurity/agentguard.git"
   },
   "engines": {
     "node": ">=18.0.0"
@@ -41,8 +48,13 @@
     "@types/node": "^20.11.24",
     "typescript": "^5.3.3"
   },
+  "homepage": "https://github.com/GoPlusSecurity/agentguard#readme",
+  "bugs": {
+    "url": "https://github.com/GoPlusSecurity/agentguard/issues"
+  },
   "files": [
     "dist",
-    "README.md"
+    "README.md",
+    "LICENSE"
   ]
 }

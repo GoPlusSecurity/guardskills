@@ -51,7 +51,7 @@ function createServer(options?: { registryPath?: string }): Server {
 
   const server = new Server(
     {
-      name: 'guardskills',
+      name: 'agentguard',
       version: '1.0.0',
     },
     {
@@ -431,7 +431,7 @@ async function main() {
   const program = new Command();
 
   program
-    .name('guardskills')
+    .name('agentguard')
     .description('Security skill MCP server for AI agents')
     .version('1.0.0')
     .option('--registry-path <path>', 'Path to registry file')
@@ -445,7 +445,7 @@ async function main() {
       const transport = new StdioServerTransport();
       await server.connect(transport);
 
-      console.error('GuardSkills MCP server started');
+      console.error('AgentGuard MCP server started');
     });
 
   await program.parseAsync(process.argv);
