@@ -7,7 +7,7 @@ import type { HookInput, HookOutput } from './types.js';
 // Paths
 // ---------------------------------------------------------------------------
 
-const AGENTGUARD_DIR = join(homedir(), '.agentguard');
+const AGENTGUARD_DIR = process.env.AGENTGUARD_HOME || join(homedir(), '.agentguard');
 const CONFIG_PATH = join(AGENTGUARD_DIR, 'config.json');
 const AUDIT_PATH = join(AGENTGUARD_DIR, 'audit.jsonl');
 
