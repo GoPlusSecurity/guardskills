@@ -198,8 +198,12 @@ export class ActionScanner {
     const analysis = analyzeExecCommand(command, execAllowed);
 
     if (analysis.should_block) {
+      // Critical threats (rm -rf, fork bomb, etc.) are always hard denied.
+      // Non-critical blocked commands (exec not allowed but not dangerous)
+      // return 'confirm' so balanced mode can prompt the user instead of blocking.
+      const isCritical = analysis.risk_level === 'critical';
       return {
-        decision: 'deny',
+        decision: isCritical ? 'deny' : 'confirm',
         risk_level: analysis.risk_level,
         risk_tags: analysis.risk_tags,
         evidence: analysis.evidence,

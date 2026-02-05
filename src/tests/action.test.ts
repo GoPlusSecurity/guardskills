@@ -78,6 +78,36 @@ describe('Exec Command Detector', () => {
     }, true);
     assert.ok(result.risk_tags.includes('SENSITIVE_ENV_VAR'));
   });
+
+  it('should allow npm install as safe command even when exec not allowed', () => {
+    const result = analyzeExecCommand({ command: 'npm install express' }, false);
+    assert.equal(result.risk_level, 'low');
+    assert.ok(!result.should_block, 'npm install should not be blocked');
+  });
+
+  it('should allow git clone as safe command even when exec not allowed', () => {
+    const result = analyzeExecCommand({ command: 'git clone https://github.com/org/repo.git' }, false);
+    assert.equal(result.risk_level, 'low');
+    assert.ok(!result.should_block, 'git clone should not be blocked');
+  });
+
+  it('should allow mkdir as safe command', () => {
+    const result = analyzeExecCommand({ command: 'mkdir -p src/utils' }, false);
+    assert.equal(result.risk_level, 'low');
+    assert.ok(!result.should_block, 'mkdir should not be blocked');
+  });
+
+  it('should still block npm install with shell injection', () => {
+    const result = analyzeExecCommand({ command: 'npm install; rm -rf /' }, false);
+    assert.ok(result.should_block || result.risk_tags.includes('DANGEROUS_COMMAND'),
+      'npm install with shell injection should be flagged');
+  });
+
+  it('should block unknown commands when exec not allowed (non-critical)', () => {
+    const result = analyzeExecCommand({ command: 'some-unknown-tool --flag' }, false);
+    assert.ok(result.should_block, 'Unknown command should be blocked when exec not allowed');
+    assert.notEqual(result.risk_level, 'critical', 'Unknown command is not critical');
+  });
 });
 
 describe('Network Request Detector', () => {

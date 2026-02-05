@@ -109,22 +109,26 @@ Commands matching the safe list are allowed without restriction, **unless** they
 
 | Category | Commands |
 |----------|----------|
-| **Basic** | `ls`, `echo`, `pwd`, `whoami`, `date`, `hostname`, `uname` |
+| **Basic** | `ls`, `echo`, `pwd`, `whoami`, `date`, `hostname`, `uname`, `tree`, `du`, `df`, `sort`, `uniq`, `diff`, `cd` |
 | **Read** | `cat`, `head`, `tail`, `wc`, `grep`, `find`, `which`, `type` |
-| **Git (read-only)** | `git status`, `git log`, `git diff`, `git branch`, `git show`, `git remote` |
-| **Version checks** | `node -v`, `npm -v`, `npx --version`, `python --version`, `tsc --version`, `go version`, `rustc --version`, `java -version` |
+| **File ops** | `mkdir`, `cp`, `mv`, `touch` |
+| **Git** | `git status`, `git log`, `git diff`, `git branch`, `git show`, `git remote`, `git clone`, `git checkout`, `git pull`, `git fetch`, `git merge`, `git add`, `git commit`, `git push` |
+| **Package managers** | `npm install`, `npm run`, `npm test`, `npm ci`, `npm start`, `npx`, `yarn`, `pnpm`, `pip install`, `pip3 install` |
+| **Build & run** | `node`, `python`, `python3`, `tsc`, `go build`, `go run`, `go version`, `cargo build`, `cargo run`, `cargo test`, `make`, `rustc --version`, `java -version` |
 
 ### Exec Decision Logic
 
 1. Matches fork bomb (regex) -> DENY (critical)
 2. Matches dangerous command -> DENY (critical)
 3. Matches safe command (no metacharacters, no sensitive paths) -> ALLOW (low)
-4. Exec not allowed in capability model -> DENY
+4. Exec not allowed in capability model -> CONFIRM (non-critical) — balanced mode prompts user
 5. Matches sensitive data access -> flag HIGH
 6. Matches system command -> flag MEDIUM
 7. Matches network command -> flag MEDIUM
 8. Contains shell injection pattern -> flag MEDIUM
 9. Sensitive env vars passed -> flag evidence
+
+**Note**: In balanced mode, non-critical blocked commands (step 4) trigger a user prompt instead of a hard block. Only critical threats (steps 1-2) are always denied regardless of protection level.
 
 ## Default Policies
 

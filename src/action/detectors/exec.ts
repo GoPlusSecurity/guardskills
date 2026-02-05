@@ -21,12 +21,27 @@ export interface ExecAnalysisResult {
  * Only applied when the command has no shell metacharacters.
  */
 const SAFE_COMMAND_PREFIXES = [
+  // Basic read-only
   'ls', 'echo', 'pwd', 'whoami', 'date', 'hostname', 'uname',
   'cat', 'head', 'tail', 'wc', 'grep', 'find', 'which', 'type',
+  'tree', 'du', 'df', 'sort', 'uniq', 'diff', 'cd',
+  // File operations (safe without metacharacters)
+  'mkdir', 'cp', 'mv', 'touch',
+  // Git (read + common write operations)
   'git status', 'git log', 'git diff', 'git branch', 'git show', 'git remote',
+  'git clone', 'git checkout', 'git pull', 'git fetch', 'git merge', 'git add', 'git commit', 'git push',
+  // Package managers
+  'npm install', 'npm run', 'npm test', 'npm ci', 'npm start',
+  'npx', 'yarn', 'pnpm',
+  'pip install', 'pip3 install',
+  // Version checks
   'node --version', 'node -v', 'npm --version', 'npm -v', 'npx --version',
   'python --version', 'python3 --version', 'pip --version',
   'tsc --version', 'go version', 'rustc --version', 'java -version',
+  // Build & run
+  'tsc', 'go build', 'go run',
+  'cargo build', 'cargo run', 'cargo test',
+  'make',
 ];
 
 /**
