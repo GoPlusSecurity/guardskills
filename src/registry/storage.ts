@@ -1,5 +1,6 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
+import { homedir } from 'os';
 import type { RegistryData, TrustRecord } from '../types/registry.js';
 
 /**
@@ -29,7 +30,7 @@ export class RegistryStorage {
   constructor(options: StorageOptions = {}) {
     this.filePath =
       options.filePath ||
-      path.join(process.cwd(), 'data', 'registry.json');
+      path.join(homedir(), '.agentguard', 'registry.json');
   }
 
   /**
