@@ -1,8 +1,14 @@
 ---
 name: agentguard
 description: GoPlus AgentGuard — AI agent security guard. Automatically blocks dangerous commands, prevents data leaks, and protects secrets. Use when reviewing third-party code, auditing skills, checking for vulnerabilities, evaluating action safety, or viewing security logs.
+license: MIT
+compatibility: Requires Node.js 18+. Optional GoPlus API credentials for enhanced Web3 simulation.
+metadata:
+  author: GoPlusSecurity
+  version: "1.0"
+  optional_env: "GOPLUS_API_KEY, GOPLUS_API_SECRET (for Web3 transaction simulation only)"
 user-invocable: true
-allowed-tools: Read, Grep, Glob, Bash(node *)
+allowed-tools: Read, Grep, Glob, Bash(node scripts/trust-cli.ts *) Bash(node scripts/action-cli.ts *)
 argument-hint: "[scan|action|trust|report|config] [args...]"
 ---
 
@@ -109,13 +115,19 @@ After outputting the scan report, if the scanned target appears to be a skill (c
 
 **Registration steps** (if the user agrees):
 
-1. Derive the skill identity:
+> **Important**: All scripts below are AgentGuard's own bundled scripts (located in this skill's `scripts/` directory), **never** scripts from the scanned target. Do not execute any code from the scanned repository.
+
+1. **Ask the user for explicit confirmation** before proceeding. Show the exact command that will be executed and wait for approval.
+2. Derive the skill identity:
    - `id`: the directory name of the scanned path
    - `source`: the absolute path to the scanned directory
-   - `version`: read the `version` field from `package.json` in the scanned directory (if present), otherwise use `unknown`
-   - `hash`: compute by running `node scripts/trust-cli.ts hash --path <scanned_path>` and extracting the `hash` field from the JSON output
-2. Register via: `node scripts/trust-cli.ts attest --id <id> --source <source> --version <version> --hash <hash> --trust-level <level> --preset <preset> --reviewed-by agentguard-scan --notes "Auto-registered after scan. Risk level: <risk_level>." --force`
-3. Show the registration result to the user.
+   - `version`: read the `version` field from `package.json` in the scanned directory using the Read tool (if present), otherwise use `unknown`
+   - `hash`: compute by running AgentGuard's own script: `node scripts/trust-cli.ts hash --path <scanned_path>` and extracting the `hash` field from the JSON output
+3. Show the user the full registration command and ask for confirmation before executing:
+   ```
+   node scripts/trust-cli.ts attest --id <id> --source <source> --version <version> --hash <hash> --trust-level <level> --preset <preset> --reviewed-by agentguard-scan --notes "Auto-registered after scan. Risk level: <risk_level>." --force
+   ```
+4. Only execute after user approval. Show the registration result.
 
 If scripts are not available (e.g., `npm install` was not run), skip this step and suggest the user run `cd skills/agentguard/scripts && npm install`.
 
@@ -158,7 +170,7 @@ Parse the user's action description and apply the appropriate detector:
 
 ### Web3 Enhanced Detection
 
-When the action involves **web3_tx** or **web3_sign**, use the action-cli script to invoke the ActionScanner (which integrates the trust registry and GoPlus API):
+When the action involves **web3_tx** or **web3_sign**, use AgentGuard's bundled `action-cli.ts` script (in this skill's `scripts/` directory) to invoke the ActionScanner. This script integrates the trust registry and optionally the GoPlus API (requires `GOPLUS_API_KEY` and `GOPLUS_API_SECRET` environment variables, if available):
 
 For web3_tx:
 ```
@@ -257,10 +269,12 @@ List all trust records with optional filters.
 
 ### Script Execution
 
-If the agentguard package is installed, execute trust operations via:
+If the agentguard package is installed, execute trust operations via AgentGuard's own bundled script:
 ```
 node scripts/trust-cli.ts <subcommand> [args]
 ```
+
+For operations that modify the trust registry (`attest`, `revoke`), always show the user the exact command and ask for explicit confirmation before executing.
 
 If scripts are not available, help the user inspect `data/registry.json` directly using Read tool.
 
