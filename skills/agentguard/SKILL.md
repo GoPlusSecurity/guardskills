@@ -362,21 +362,24 @@ If no level is specified, read and display the current config.
 
 ---
 
-## Auto-Scan on Session Start
+## Auto-Scan on Session Start (Opt-In)
 
-When GoPlus AgentGuard is installed as a plugin, it automatically scans all skills in `~/.claude/skills/` at session startup:
+AgentGuard can optionally scan installed skills at session startup. **This is disabled by default** and must be explicitly enabled:
 
-1. Discovers all skill directories (containing `SKILL.md`)
-2. Calculates artifact hash — skips skills already registered with the same hash
-3. Runs `quickScan()` on new or updated skills
-4. Auto-registers in the trust registry based on scan results:
+- **Claude Code**: Set environment variable `AGENTGUARD_AUTO_SCAN=1`
+- **OpenClaw**: Pass `{ skipAutoScan: false }` when registering the plugin
 
-| Scan Result | Trust Level | Capabilities |
-|-------------|-------------|--------------|
-| `low` risk | `trusted` | `read_only` (filesystem read access) |
-| `medium` risk | `restricted` | `read_only` |
-| `high` / `critical` risk | `untrusted` | `none` (all capabilities denied) |
+When enabled, auto-scan operates in **report-only mode**:
 
-This runs asynchronously and does not block session startup. Results are logged to `~/.agentguard/audit.jsonl`.
+1. Discovers skill directories (containing `SKILL.md`) under `~/.claude/skills/` and `~/.openclaw/skills/`
+2. Runs `quickScan()` on each skill
+3. Reports results to stderr (skill name + risk level + risk tags)
 
-Users can override auto-assigned trust levels with `/agentguard trust attest`.
+Auto-scan **does NOT**:
+- Modify the trust registry (no `forceAttest` calls)
+- Write code snippets or evidence details to disk
+- Execute any code from the scanned skills
+
+The audit log (`~/.agentguard/audit.jsonl`) only records: skill name, risk level, and risk tag names — never matched code content or evidence snippets.
+
+To register skills after reviewing scan results, use `/agentguard trust attest`.

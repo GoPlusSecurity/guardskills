@@ -30,8 +30,6 @@ import { loadConfig, writeAuditLog } from './common.js';
 import type { AgentGuardInstance } from './types.js';
 import { SkillScanner } from '../scanner/index.js';
 import { SkillRegistry } from '../registry/index.js';
-import type { CapabilityModel, SkillIdentity } from '../types/skill.js';
-import type { TrustLevel } from '../types/registry.js';
 
 // ---------------------------------------------------------------------------
 // OpenClaw Types (subset we use)
@@ -113,20 +111,14 @@ function discoverSkillDirs(skillsDir: string): { name: string; path: string }[] 
   return skills;
 }
 
-function riskToTrustLevel(riskLevel: string): TrustLevel {
-  switch (riskLevel) {
-    case 'low': return 'trusted';
-    case 'medium': return 'restricted';
-    default: return 'untrusted';
-  }
-}
-
 /**
- * Scan skill directories (~/.openclaw/skills/ and ~/.claude/skills/) and register them.
+ * Scan skill directories (~/.openclaw/skills/ and ~/.claude/skills/).
+ * Scan-only mode: reports results via logger, does NOT modify the trust registry.
+ * Users can register skills manually with /agentguard trust attest.
  */
 async function autoScanSkillDirs(
   scanner: SkillScanner,
-  registry: SkillRegistry,
+  _registry: SkillRegistry,
   logger: (msg: string) => void
 ): Promise<void> {
   const skills = [
@@ -137,78 +129,32 @@ async function autoScanSkillDirs(
   if (skills.length === 0) return;
 
   let scanned = 0;
-  let trusted = 0;
-  let restricted = 0;
-  let untrusted = 0;
 
   for (const skill of skills) {
     // Skip self
     if (skill.name === 'agentguard') continue;
 
     try {
-      const hash = await scanner.calculateArtifactHash(skill.path);
-
-      // Already registered with same hash → skip
-      const existing = await registry.lookup({
-        id: skill.name,
-        source: skill.path,
-        version_ref: '0.0.0',
-        artifact_hash: hash,
-      });
-      if (existing.record && existing.effective_trust_level !== 'untrusted') {
-        continue;
-      }
-
       const result = await scanner.quickScan(skill.path);
       scanned++;
 
-      const trustLevel = riskToTrustLevel(result.risk_level);
-      if (trustLevel === 'trusted') trusted++;
-      else if (trustLevel === 'restricted') restricted++;
-      else untrusted++;
-
-      await registry.forceAttest({
-        skill: {
-          id: skill.name,
-          source: skill.path,
-          version_ref: '0.0.0',
-          artifact_hash: hash,
-        },
-        trust_level: trustLevel,
-        capabilities: {
-          network_allowlist: [],
-          filesystem_allowlist: trustLevel === 'untrusted' ? [] : ['./**'],
-          exec: 'deny',
-          secrets_allowlist: [],
-        },
-        review: {
-          reviewed_by: 'auto-scan',
-          evidence_refs: [`scan:${result.risk_level}:${result.risk_tags.join(',')}`],
-          notes: `Auto-scanned on session start. Risk: ${result.risk_level}. Tags: ${result.risk_tags.join(', ') || 'none'}`,
-        },
-      });
-
+      // Audit log — only record skill name, risk level, and tag names (no code/evidence)
       writeScanAuditLog({
         timestamp: new Date().toISOString(),
         event: 'auto_scan',
         skill_name: skill.name,
-        skill_path: skill.path,
         risk_level: result.risk_level,
         risk_tags: result.risk_tags,
-        trust_level: trustLevel,
-        summary: result.summary,
       });
+
+      logger(`[AgentGuard] Skill "${skill.name}": ${result.risk_level} risk [${result.risk_tags.join(', ')}]`);
     } catch {
       // Skip skills that fail to scan
     }
   }
 
   if (scanned > 0) {
-    const parts: string[] = [];
-    if (trusted > 0) parts.push(`${trusted} trusted`);
-    if (restricted > 0) parts.push(`${restricted} restricted`);
-    if (untrusted > 0) parts.push(`${untrusted} untrusted`);
-    logger(`[AgentGuard] Scanned ${scanned} skill dir(s) — ${parts.join(', ')}`);
+    logger(`[AgentGuard] Scanned ${scanned} skill dir(s). Use /agentguard trust attest to register.`);
   }
 }
 
@@ -222,7 +168,7 @@ async function autoScanSkillDirs(
 export interface OpenClawPluginOptions {
   /** Protection level (strict/balanced/permissive) */
   level?: string;
-  /** Skip auto-scanning of plugins */
+  /** Enable auto-scanning of plugins (default: false — opt-in) */
   skipAutoScan?: boolean;
   /** Custom AgentGuard instance factory */
   agentguardFactory?: () => AgentGuardInstance;
@@ -270,103 +216,13 @@ function getPluginDir(source: string): string {
 }
 
 /**
- * Infer capabilities from scan result and plugin info
- */
-function inferCapabilities(
-  riskLevel: string,
-  riskTags: string[],
-  toolNames: string[]
-): CapabilityModel {
-  const hasExecTool = toolNames.some(t =>
-    t.toLowerCase().includes('exec') ||
-    t.toLowerCase().includes('shell') ||
-    t.toLowerCase().includes('bash')
-  );
-
-  const hasNetworkTool = toolNames.some(t =>
-    t.toLowerCase().includes('fetch') ||
-    t.toLowerCase().includes('http') ||
-    t.toLowerCase().includes('request') ||
-    t.toLowerCase().includes('browser')
-  );
-
-  const hasFileTool = toolNames.some(t =>
-    t.toLowerCase().includes('file') ||
-    t.toLowerCase().includes('write') ||
-    t.toLowerCase().includes('read')
-  );
-
-  // Start with restrictive defaults
-  const capabilities: CapabilityModel = {
-    network_allowlist: [],
-    filesystem_allowlist: [],
-    exec: 'deny',
-    secrets_allowlist: [],
-  };
-
-  // If plugin has network tools and scan is clean, allow network
-  if (hasNetworkTool && riskLevel !== 'critical' && riskLevel !== 'high') {
-    capabilities.network_allowlist = ['*'];
-  }
-
-  // If plugin has file tools and scan is clean, allow filesystem
-  if (hasFileTool && riskLevel !== 'critical') {
-    capabilities.filesystem_allowlist = ['./**'];
-  }
-
-  // Only allow exec if explicitly needed and scan is very clean
-  if (hasExecTool && riskLevel === 'low' && !riskTags.includes('SHELL_EXEC')) {
-    capabilities.exec = 'allow';
-  }
-
-  return capabilities;
-}
-
-/**
- * Determine trust level from scan result
- */
-function determineTrustLevel(riskLevel: string, riskTags: string[]): TrustLevel {
-  // Critical findings → untrusted
-  if (riskLevel === 'critical') {
-    return 'untrusted';
-  }
-
-  // Specific dangerous patterns → untrusted
-  const dangerousTags = [
-    'PROMPT_INJECTION',
-    'PRIVATE_KEY_PATTERN',
-    'MNEMONIC_PATTERN',
-    'WALLET_DRAINING',
-    'WEBHOOK_EXFIL',
-    'REMOTE_LOADER',
-    'AUTO_UPDATE',
-  ];
-
-  if (riskTags.some(tag => dangerousTags.includes(tag))) {
-    return 'untrusted';
-  }
-
-  // High risk → restricted
-  if (riskLevel === 'high') {
-    return 'restricted';
-  }
-
-  // Medium risk → restricted
-  if (riskLevel === 'medium') {
-    return 'restricted';
-  }
-
-  // Low risk → trusted
-  return 'trusted';
-}
-
-/**
- * Scan a plugin and register it in AgentGuard's trust registry
+ * Scan a plugin and cache its risk level. Scan-only: does NOT modify trust registry.
+ * Users can register plugins manually with /agentguard trust attest.
  */
 async function scanAndRegisterPlugin(
   plugin: OpenClawPluginRecord,
   scanner: SkillScanner,
-  registry: SkillRegistry,
+  _registry: SkillRegistry,
   logger: (msg: string) => void
 ): Promise<void> {
   // Skip if already scanned
@@ -377,46 +233,13 @@ async function scanAndRegisterPlugin(
   const pluginDir = getPluginDir(plugin.source);
 
   try {
-    // Calculate artifact hash
-    const artifactHash = await scanner.calculateArtifactHash(pluginDir);
-
     // Perform scan
     const scanResult = await scanner.quickScan(pluginDir);
 
-    // Cache result
+    // Cache result (for runtime before_tool_call checks)
     pluginScanCache.set(plugin.id, {
       riskLevel: scanResult.risk_level,
       riskTags: scanResult.risk_tags,
-    });
-
-    // Determine trust level
-    const trustLevel = determineTrustLevel(scanResult.risk_level, scanResult.risk_tags);
-
-    // Infer capabilities
-    const capabilities = inferCapabilities(
-      scanResult.risk_level,
-      scanResult.risk_tags,
-      plugin.toolNames
-    );
-
-    // Create skill identity
-    const skillIdentity: SkillIdentity = {
-      id: plugin.id,
-      source: plugin.source,
-      version_ref: plugin.version || '0.0.0',
-      artifact_hash: artifactHash,
-    };
-
-    // Register in trust registry (force to skip confirmation)
-    await registry.forceAttest({
-      skill: skillIdentity,
-      trust_level: trustLevel,
-      capabilities,
-      review: {
-        reviewed_by: 'agentguard:auto-scan',
-        evidence_refs: [`scan:${plugin.id}`],
-        notes: `Auto-scanned on plugin load. Risk: ${scanResult.risk_level}. Tags: ${scanResult.risk_tags.join(', ') || 'none'}`,
-      },
     });
 
     // Build tool → plugin mapping
@@ -424,36 +247,13 @@ async function scanAndRegisterPlugin(
       toolToPluginMap.set(toolName, plugin.id);
     }
 
-    logger(`[AgentGuard] Scanned plugin "${plugin.id}": ${trustLevel} (${scanResult.risk_level} risk, ${scanResult.risk_tags.length} findings)`);
+    logger(`[AgentGuard] Scanned plugin "${plugin.id}": ${scanResult.risk_level} risk [${scanResult.risk_tags.join(', ')}]`);
 
   } catch (err) {
-    // If scan fails, register as untrusted
+    // If scan fails, cache as unknown
     pluginScanCache.set(plugin.id, {
       riskLevel: 'unknown',
       riskTags: ['SCAN_FAILED'],
-    });
-
-    const skillIdentity: SkillIdentity = {
-      id: plugin.id,
-      source: plugin.source,
-      version_ref: plugin.version || '0.0.0',
-      artifact_hash: 'unknown',
-    };
-
-    await registry.forceAttest({
-      skill: skillIdentity,
-      trust_level: 'untrusted',
-      capabilities: {
-        network_allowlist: [],
-        filesystem_allowlist: [],
-        exec: 'deny',
-        secrets_allowlist: [],
-      },
-      review: {
-        reviewed_by: 'agentguard:auto-scan',
-        evidence_refs: [],
-        notes: `Scan failed: ${String(err)}. Defaulting to untrusted.`,
-      },
     });
 
     // Still build tool mapping
@@ -461,7 +261,7 @@ async function scanAndRegisterPlugin(
       toolToPluginMap.set(toolName, plugin.id);
     }
 
-    logger(`[AgentGuard] Plugin "${plugin.id}" scan failed, registered as untrusted: ${String(err)}`);
+    logger(`[AgentGuard] Plugin "${plugin.id}" scan failed: ${String(err)}`);
   }
 }
 
@@ -554,8 +354,8 @@ export function registerOpenClawPlugin(
     return agentguard!;
   }
 
-  // Auto-scan plugins on registration (async, non-blocking)
-  if (!options.skipAutoScan) {
+  // Auto-scan plugins on registration (async, non-blocking, opt-in)
+  if (options.skipAutoScan === false) {
     // Use setImmediate to allow plugin registration to complete first
     setImmediate(async () => {
       try {
@@ -566,14 +366,16 @@ export function registerOpenClawPlugin(
     });
   }
 
-  // session_start → auto-scan skill directories
-  api.on('session_start', async () => {
-    try {
-      await autoScanSkillDirs(scanner, trustRegistry, logger);
-    } catch {
-      // Non-critical — never block session startup
-    }
-  });
+  // session_start → auto-scan skill directories (only when opt-in)
+  if (options.skipAutoScan === false) {
+    api.on('session_start', async () => {
+      try {
+        await autoScanSkillDirs(scanner, trustRegistry, logger);
+      } catch {
+        // Non-critical — never block session startup
+      }
+    });
+  }
 
   // before_tool_call → evaluate and optionally block
   api.on('before_tool_call', async (event: unknown) => {

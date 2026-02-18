@@ -8,14 +8,27 @@
  *   1. Calculate artifact hash
  *   2. Check trust registry — skip if already registered with same hash
  *   3. Run quickScan for new/updated skills
- *   4. Auto-register with trust level based on scan results
+ *   4. Report results to stderr (scan-only, does NOT modify trust registry)
+ *
+ * OPT-IN: This script only runs when AGENTGUARD_AUTO_SCAN=1.
+ * Without this env var, the script exits immediately.
+ *
+ * To register scanned skills, use: /agentguard trust attest
  *
  * Exits 0 always (informational only, never blocks session startup).
  */
 
-import { readdirSync, existsSync, readFileSync, appendFileSync, mkdirSync } from 'node:fs';
+import { readdirSync, existsSync, appendFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
+
+// ---------------------------------------------------------------------------
+// Opt-in gate: only run when explicitly enabled
+// ---------------------------------------------------------------------------
+
+if (process.env.AGENTGUARD_AUTO_SCAN !== '1') {
+  process.exit(0);
+}
 
 // ---------------------------------------------------------------------------
 // Load AgentGuard engine
@@ -26,16 +39,14 @@ const agentguardPath = join(
   '..', '..', '..', '..', 'dist', 'index.js'
 );
 
-let createAgentGuard, CAPABILITY_PRESETS;
+let createAgentGuard;
 try {
   const gs = await import(agentguardPath);
   createAgentGuard = gs.createAgentGuard || gs.default;
-  CAPABILITY_PRESETS = gs.CAPABILITY_PRESETS;
 } catch {
   try {
     const gs = await import('@goplus/agentguard');
     createAgentGuard = gs.createAgentGuard || gs.default;
-    CAPABILITY_PRESETS = gs.CAPABILITY_PRESETS;
   } catch {
     // Can't load engine — exit silently
     process.exit(0);
@@ -98,53 +109,7 @@ function discoverSkills() {
 }
 
 // ---------------------------------------------------------------------------
-// Risk level → trust level mapping
-// ---------------------------------------------------------------------------
-
-function riskToTrustLevel(riskLevel) {
-  switch (riskLevel) {
-    case 'low':
-      return 'trusted';
-    case 'medium':
-      return 'restricted';
-    case 'high':
-    case 'critical':
-      return 'untrusted';
-    default:
-      return 'restricted';
-  }
-}
-
-function riskToCapabilities(riskLevel) {
-  switch (riskLevel) {
-    case 'low':
-      return CAPABILITY_PRESETS?.read_only || {
-        network_allowlist: [],
-        filesystem_allowlist: ['./**'],
-        exec: 'deny',
-        secrets_allowlist: [],
-      };
-    case 'medium':
-      return CAPABILITY_PRESETS?.read_only || {
-        network_allowlist: [],
-        filesystem_allowlist: ['./**'],
-        exec: 'deny',
-        secrets_allowlist: [],
-      };
-    case 'high':
-    case 'critical':
-    default:
-      return CAPABILITY_PRESETS?.none || {
-        network_allowlist: [],
-        filesystem_allowlist: [],
-        exec: 'deny',
-        secrets_allowlist: [],
-      };
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Main
+// Main — scan-only mode (no trust registry mutations)
 // ---------------------------------------------------------------------------
 
 async function main() {
@@ -153,93 +118,46 @@ async function main() {
     process.exit(0);
   }
 
-  const { scanner, registry } = createAgentGuard();
+  const { scanner } = createAgentGuard();
 
   let scanned = 0;
-  let trusted = 0;
-  let restricted = 0;
-  let untrusted = 0;
-  let skipped = 0;
+  const results = [];
 
   for (const skill of skills) {
     // Skip self (agentguard)
-    if (skill.name === 'agentguard') {
-      skipped++;
-      continue;
-    }
+    if (skill.name === 'agentguard') continue;
 
     try {
-      // Calculate hash
-      const hash = await scanner.calculateArtifactHash(skill.path);
-
-      // Check registry
-      const existing = await registry.lookup({
-        id: skill.name,
-        source: skill.path,
-        version_ref: '0.0.0',
-        artifact_hash: hash,
-      });
-
-      // Already registered with same hash → skip
-      if (existing.record && existing.effective_trust_level !== 'untrusted') {
-        skipped++;
-        continue;
-      }
-
-      // Scan
       const result = await scanner.quickScan(skill.path);
       scanned++;
 
-      // Determine trust level
-      const trustLevel = riskToTrustLevel(result.risk_level);
-      const capabilities = riskToCapabilities(result.risk_level);
-
-      if (trustLevel === 'trusted') trusted++;
-      else if (trustLevel === 'restricted') restricted++;
-      else untrusted++;
-
-      // Register
-      await registry.forceAttest({
-        skill: {
-          id: skill.name,
-          source: skill.path,
-          version_ref: '0.0.0',
-          artifact_hash: hash,
-        },
-        trust_level: trustLevel,
-        capabilities,
-        review: {
-          reviewed_by: 'auto-scan',
-          evidence_refs: [`scan:${result.risk_level}:${result.risk_tags.join(',')}`],
-          notes: `Auto-scanned on session start. Risk: ${result.risk_level}. Tags: ${result.risk_tags.join(', ') || 'none'}`,
-        },
+      results.push({
+        name: skill.name,
+        risk_level: result.risk_level,
+        risk_tags: result.risk_tags,
       });
 
-      // Audit log
+      // Audit log — only record skill name, risk level, and tag names (no code/evidence)
       writeAuditLog({
         timestamp: new Date().toISOString(),
         event: 'auto_scan',
         skill_name: skill.name,
-        skill_path: skill.path,
         risk_level: result.risk_level,
         risk_tags: result.risk_tags,
-        trust_level: trustLevel,
-        summary: result.summary,
       });
     } catch {
       // Skip skills that fail to scan
-      skipped++;
     }
   }
 
   // Output summary to stderr (shown as status message)
   if (scanned > 0) {
-    const parts = [];
-    if (trusted > 0) parts.push(`${trusted} trusted`);
-    if (restricted > 0) parts.push(`${restricted} restricted`);
-    if (untrusted > 0) parts.push(`${untrusted} untrusted`);
+    const lines = results.map(r =>
+      `  ${r.name}: ${r.risk_level}${r.risk_tags.length ? ` [${r.risk_tags.join(', ')}]` : ''}`
+    );
     process.stderr.write(
-      `GoPlus AgentGuard: scanned ${scanned} new skill(s) — ${parts.join(', ')}\n`
+      `GoPlus AgentGuard: scanned ${scanned} skill(s)\n${lines.join('\n')}\n` +
+      `Use /agentguard trust attest to register trusted skills.\n`
     );
   }
 
