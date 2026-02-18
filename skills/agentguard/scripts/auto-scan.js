@@ -46,7 +46,10 @@ try {
 // Config
 // ---------------------------------------------------------------------------
 
-const SKILLS_DIR = join(homedir(), '.claude', 'skills');
+const SKILLS_DIRS = [
+  join(homedir(), '.claude', 'skills'),
+  join(homedir(), '.openclaw', 'skills'),
+];
 const AGENTGUARD_DIR = join(homedir(), '.agentguard');
 const AUDIT_PATH = join(AGENTGUARD_DIR, 'audit.jsonl');
 
@@ -70,25 +73,26 @@ function writeAuditLog(entry) {
 // ---------------------------------------------------------------------------
 
 /**
- * Find all skill directories under ~/.claude/skills/
+ * Find all skill directories under ~/.claude/skills/ and ~/.openclaw/skills/
  * A skill directory is one that contains a SKILL.md file.
  */
 function discoverSkills() {
-  if (!existsSync(SKILLS_DIR)) return [];
-
   const skills = [];
-  try {
-    const entries = readdirSync(SKILLS_DIR, { withFileTypes: true });
-    for (const entry of entries) {
-      if (!entry.isDirectory()) continue;
-      const skillDir = join(SKILLS_DIR, entry.name);
-      const skillMd = join(skillDir, 'SKILL.md');
-      if (existsSync(skillMd)) {
-        skills.push({ name: entry.name, path: skillDir });
+  for (const skillsDir of SKILLS_DIRS) {
+    if (!existsSync(skillsDir)) continue;
+    try {
+      const entries = readdirSync(skillsDir, { withFileTypes: true });
+      for (const entry of entries) {
+        if (!entry.isDirectory()) continue;
+        const skillDir = join(skillsDir, entry.name);
+        const skillMd = join(skillDir, 'SKILL.md');
+        if (existsSync(skillMd)) {
+          skills.push({ name: entry.name, path: skillDir });
+        }
       }
+    } catch {
+      // Can't read skills dir
     }
-  } catch {
-    // Can't read skills dir
   }
   return skills;
 }
