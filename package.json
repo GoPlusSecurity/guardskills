@@ -55,6 +55,8 @@
   "files": [
     "dist",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "openclaw.plugin.json",
+    "skills"
   ]
 }
