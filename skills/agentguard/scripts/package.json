@@ -2,6 +2,6 @@
   "private": true,
   "type": "module",
   "dependencies": {
-    "@goplus/agentguard": "file:../../.."
+    "@goplus/agentguard": "^1.0.6"
   }
 }
