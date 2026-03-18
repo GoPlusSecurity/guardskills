@@ -30,6 +30,8 @@ import { loadConfig, writeAuditLog } from './common.js';
 import type { AgentGuardInstance } from './types.js';
 import { SkillScanner } from '../scanner/index.js';
 import { SkillRegistry } from '../registry/index.js';
+import { ActionScanner } from '../action/index.js';
+import { DEFAULT_CAPABILITY } from '../types/skill.js';
 
 // ---------------------------------------------------------------------------
 // OpenClaw Types (subset we use)
@@ -176,6 +178,8 @@ export interface OpenClawPluginOptions {
   scanner?: SkillScanner;
   /** Custom registry instance */
   registry?: SkillRegistry;
+  /** Workspace paths the session is allowed to access (e.g., ['~/.openclaw/workspace/**']) */
+  workspacePaths?: string[];
 }
 
 // ---------------------------------------------------------------------------
@@ -337,18 +341,26 @@ export function registerOpenClawPlugin(
   // Lazy-initialize agentguard instance
   let agentguard: AgentGuardInstance | null = null;
 
+  // Build default capabilities from workspacePaths so the core session
+  // can access its own workspace files without a manual registry entry.
+  const defaultCapabilities = options.workspacePaths
+    ? { ...DEFAULT_CAPABILITY, filesystem_allowlist: options.workspacePaths }
+    : undefined;
+
   function getAgentGuard(): AgentGuardInstance {
     if (!agentguard) {
       if (options.agentguardFactory) {
         agentguard = options.agentguardFactory();
       } else {
-        try {
-          // eslint-disable-next-line @typescript-eslint/no-require-imports
-          const { createAgentGuard } = require('@goplus/agentguard');
-          agentguard = createAgentGuard();
-        } catch {
-          throw new Error('AgentGuard: unable to load engine. Install @goplus/agentguard.');
-        }
+        // Build inline — avoids require() and passes workspace defaults
+        const actionScanner = new ActionScanner({
+          registry: trustRegistry,
+          ...(defaultCapabilities ? { defaultCapabilities } : {}),
+        });
+        agentguard = {
+          registry: trustRegistry as unknown as AgentGuardInstance['registry'],
+          actionScanner,
+        };
       }
     }
     return agentguard!;

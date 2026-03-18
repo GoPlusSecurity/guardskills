@@ -61,6 +61,7 @@ export {
 import { SkillScanner } from './scanner/index.js';
 import { SkillRegistry } from './registry/index.js';
 import { ActionScanner } from './action/index.js';
+import type { CapabilityModel } from './types/skill.js';
 
 /**
  * Create a complete AgentGuard instance with all modules
@@ -68,6 +69,8 @@ import { ActionScanner } from './action/index.js';
 export function createAgentGuard(options?: {
   registryPath?: string;
   useExternalScanner?: boolean;
+  /** Default capabilities used when no registry record is found for an actor */
+  defaultCapabilities?: CapabilityModel;
 }) {
   const registry = new SkillRegistry({
     filePath: options?.registryPath,
@@ -77,7 +80,10 @@ export function createAgentGuard(options?: {
     useExternalScanner: options?.useExternalScanner ?? true,
   });
 
-  const actionScanner = new ActionScanner({ registry });
+  const actionScanner = new ActionScanner({
+    registry,
+    defaultCapabilities: options?.defaultCapabilities,
+  });
 
   return {
     scanner,
