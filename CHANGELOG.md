@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.1.0] - 2026-03-19
+
+### Added
+- `checkup` subcommand — comprehensive agent health checkup with visual HTML report
+  - 6 security dimensions: Code Safety, Trust Hygiene, Runtime Defense, Secret Protection, Web3 Shield, Config Posture
+  - Weighted scoring algorithm (0–100 composite score)
+  - Self-contained HTML report with dark theme, animated score gauge, and expandable findings
+  - Lobster mascot with 4 health tiers: Muscular (S), Healthy (A), Tired (B), Sick (F)
+  - Premium upgrade CTA integration (agentguard.gopluslabs.io)
+  - Cross-platform browser opening (macOS/Linux/Windows)
+- `checkup-report.js` script for HTML report generation (zero external dependencies)
+- Checkup results logged to `~/.agentguard/audit.jsonl`
+
 ## [1.0.5] - 2026-03-18
 
 ### Added

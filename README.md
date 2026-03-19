@@ -120,6 +120,7 @@ Then use `/agentguard` in your agent:
 /agentguard patrol run                     # Run daily security patrol
 /agentguard patrol setup                   # Configure as OpenClaw cron job
 /agentguard patrol status                  # View last patrol results
+/agentguard checkup                        # Run agent health checkup with visual report
 /agentguard trust list                     # View trusted skills
 /agentguard report                         # View security event log
 /agentguard config balanced                # Set protection level
@@ -175,6 +176,38 @@ Reports include per-check status, finding counts, detailed findings for checks w
 - **Notifications** — optional Telegram, Discord, or Signal alerts
 
 > **Note:** Patrol requires an OpenClaw environment. For non-OpenClaw setups, use `/agentguard scan` and `/agentguard report` for manual security checks.
+
+## Agent Health Checkup 🦞
+
+Give your agent a full physical exam! The checkup evaluates your agent's security posture across 6 dimensions and generates a beautiful visual HTML report — complete with a lobster mascot whose appearance reflects your agent's health.
+
+```
+/agentguard checkup
+```
+
+### What It Checks
+
+| Dimension | What's Evaluated |
+|-----------|-----------------|
+| **Code Safety** | Scan findings across all installed skills (24 detection rules) |
+| **Trust Hygiene** | Trust registry health — expired, stale, unregistered, over-privileged entries |
+| **Runtime Defense** | Audit log analysis — threats blocked, attack patterns, deny/confirm ratios |
+| **Secret Protection** | Credential exposure — file permissions, env vars, hardcoded secrets |
+| **Web3 Shield** | Web3-specific risks — wallet draining, unlimited approvals, GoPlus API status |
+| **Config Posture** | Protection level, guard hooks, auto-scan, patrol history |
+
+### The Lobster Scale
+
+Your agent's health is visualized by a lobster mascot:
+
+| Score | Tier | Lobster | Message |
+|-------|------|---------|---------|
+| 90–100 | **S** | 💪 Muscular bodybuilder with crown & sunglasses | *"Your agent is JACKED!"* |
+| 70–89 | **A** | 🛡️ Healthy lobster with shield | *"Looking solid!"* |
+| 50–69 | **B** | ☕ Tired lobster with coffee, sweating | *"Needs a workout..."* |
+| 0–49 | **F** | 🚨 Sick lobster with bandages & thermometer | *"CRITICAL CONDITION!"* |
+
+The report is a self-contained HTML file that opens automatically in your browser. Dark theme, animated score gauge, expandable findings, and actionable recommendations.
 
 ## Protection Levels
 
@@ -251,6 +284,13 @@ The auto-guard hooks (Layer 1) have the following constraints:
 - [x] Secrets exposure scanning (private keys, mnemonics, AWS keys, GitHub tokens)
 - [x] Network exposure and firewall checks
 - [x] Audit log pattern analysis (repeat denials, exfiltration attempts)
+
+### v1.6 — Agent Health Checkup
+- [x] `checkup` — 6-dimension security health assessment
+- [x] Visual HTML report with lobster mascot (4 tiers)
+- [x] Animated score gauge, dimension cards, expandable findings
+- [x] Scoring algorithm: Code Safety, Trust Hygiene, Runtime Defense, Secret Protection, Web3 Shield, Config Posture
+- [x] Premium upgrade CTA integration
 
 ### v2.0 — Multi-Platform
 - [x] OpenClaw gateway plugin integration
