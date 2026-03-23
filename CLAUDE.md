@@ -13,6 +13,7 @@ This project provides a unified Claude Code skill: `/agentguard`
 /agentguard trust <subcommand>   — Manage skill trust levels (lookup/attest/revoke/list)
 /agentguard report               — View security event audit log
 /agentguard config <level>       — Set protection level (strict/balanced/permissive)
+/agentguard checkup              — Run agent health checkup with visual HTML report
 ```
 
 ## Project Structure

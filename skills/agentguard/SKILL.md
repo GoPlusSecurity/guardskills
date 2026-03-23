@@ -8,8 +8,8 @@ metadata:
   version: "1.1"
   optional_env: "GOPLUS_API_KEY, GOPLUS_API_SECRET (for Web3 transaction simulation only)"
 user-invocable: true
-allowed-tools: Read, Grep, Glob, Bash(node scripts/trust-cli.ts *) Bash(node scripts/action-cli.ts *) Bash(openclaw *) Bash(ss *) Bash(lsof *) Bash(ufw *) Bash(iptables *) Bash(crontab *) Bash(systemctl list-timers *) Bash(find *) Bash(stat *) Bash(env) Bash(sha256sum *)
-argument-hint: "[scan|action|patrol|trust|report|config] [args...]"
+allowed-tools: Read, Grep, Glob, Bash(node scripts/trust-cli.ts *) Bash(node scripts/action-cli.ts *) Bash(node scripts/checkup-report.js) Bash(openclaw *) Bash(ss *) Bash(lsof *) Bash(ufw *) Bash(iptables *) Bash(crontab *) Bash(systemctl list-timers *) Bash(find *) Bash(stat *) Bash(env) Bash(sha256sum *)
+argument-hint: "[scan|action|patrol|trust|report|config|checkup] [args...]"
 ---
 
 # GoPlus AgentGuard — AI Agent Security Framework
@@ -26,6 +26,7 @@ Parse `$ARGUMENTS` to determine the subcommand:
 - **`trust <lookup|attest|revoke|list> [args]`** — Manage skill trust levels
 - **`report`** — View recent security events from the audit log
 - **`config <strict|balanced|permissive>`** — Set protection level
+- **`checkup`** — Run a comprehensive agent health checkup and generate a visual HTML report
 
 If no subcommand is given, or the first argument is a path, default to **scan**.
 
@@ -585,6 +586,176 @@ For untrusted skills with blocked actions, suggest: `/agentguard trust attest` t
 ```
 
 If the log file doesn't exist, inform the user that no security events have been recorded yet, and suggest they enable hooks via `./setup.sh` or by adding the plugin.
+
+---
+
+# Health Checkup
+
+## Subcommand: checkup
+
+Run a comprehensive agent health checkup across 6 security dimensions. Generates a visual HTML report with a lobster mascot and opens it in the browser. The lobster's appearance reflects the agent's health: muscular bodybuilder (score 90+), healthy with shield (70–89), tired with coffee (50–69), or sick with bandages (0–49).
+
+### Step 1: Data Collection
+
+Run these checks in parallel where possible. These are **universal agent security checks** — they apply to any Claude Code or OpenClaw environment, regardless of whether AgentGuard is installed.
+
+1. **Discover & scan installed skills**: Glob `~/.claude/skills/*/SKILL.md` and `~/.openclaw/skills/*/SKILL.md`. For each discovered skill, **run `/agentguard scan <skill_path>`** using the scan subcommand logic (24 detection rules). Collect the scan results (risk level, findings count, risk tags) for each skill.
+2. **Credential file permissions**: `stat` on `~/.ssh/`, `~/.gnupg/`, and if OpenClaw: `stat` on `$OC/openclaw.json`, `$OC/devices/paired.json`
+3. **Sensitive credential scan (DLP)**: Use Grep to scan workspace memory/logs directories for leaked secrets:
+   - Private keys: `0x[a-fA-F0-9]{64}`, `-----BEGIN.*PRIVATE KEY-----`
+   - Mnemonics: sequences of 12+ BIP-39 words, `seed_phrase`, `mnemonic`
+   - API keys/tokens: `AKIA[0-9A-Z]{16}`, `gh[pousr]_[A-Za-z0-9_]{36}`, plaintext passwords
+4. **Network exposure**: Run `lsof -i -P -n 2>/dev/null | grep LISTEN` or `ss -tlnp 2>/dev/null` to check for dangerous open ports (Redis 6379, Docker API 2375, MySQL 3306, MongoDB 27017 on 0.0.0.0)
+5. **Scheduled tasks audit**: Check `crontab -l 2>/dev/null` for suspicious entries containing `curl|bash`, `wget|sh`, or accessing `~/.ssh/`
+6. **Environment variable exposure**: Run `env` and check for sensitive variable names (`PRIVATE_KEY`, `MNEMONIC`, `SECRET`, `PASSWORD`) — detect presence only, mask values
+7. **Runtime protection check**: Check if security hooks exist in `~/.claude/settings.json`, check for audit logs at `~/.agentguard/audit.jsonl`
+
+### Step 2: Score Calculation
+
+Checklist-based scoring across 6 security dimensions. **Every failed check = 1 finding with severity and description.**
+
+#### Dimension 1: Skill & Code Safety (weight: 25%)
+
+Uses AgentGuard's 24-rule scan engine (`/agentguard scan`) to audit each installed skill.
+
+| Check | Score | If failed → finding |
+|-------|-------|---------------------|
+| All skills scanned with risk level LOW | +40 | For each skill with findings, add per-finding: "<rule_id> in <skill>:<file>:<line>" with its severity |
+| No CRITICAL scan findings across all skills | +30 | "CRITICAL: <rule_id> detected in <skill>" (CRITICAL) |
+| No HIGH scan findings across all skills | +30 | "HIGH: <rule_id> detected in <skill>" (HIGH) |
+
+Deductions from base 100: each CRITICAL finding −15, HIGH −8, MEDIUM −3. Floor at 0.
+
+If no skills installed: score = 70, add finding: "No third-party skills installed — no code to audit" (LOW).
+
+#### Dimension 2: Credential & Secret Safety (weight: 25%)
+
+Checks for leaked credentials and permission hygiene.
+
+| Check | Score | If failed → finding |
+|-------|-------|---------------------|
+| `~/.ssh/` permissions are 700 or stricter | +25 | "~/.ssh/ permissions too open (<actual>) — should be 700" (HIGH) |
+| `~/.gnupg/` permissions are 700 or stricter | +15 | "~/.gnupg/ permissions too open (<actual>) — should be 700" (MEDIUM) |
+| No private keys (hex 0x..64, PEM) found in skill code or workspace | +25 | "Plaintext private key found in <location>" (CRITICAL) |
+| No mnemonic phrases found in skill code or workspace | +20 | "Plaintext mnemonic found in <location>" (CRITICAL) |
+| No API keys/tokens (AWS AKIA.., GitHub gh*_) found in skill code | +15 | "API key/token found in <location>" (HIGH) |
+
+#### Dimension 3: Network & System Exposure (weight: 20%)
+
+Checks for dangerous network exposure and system-level risks.
+
+| Check | Score | If failed → finding |
+|-------|-------|---------------------|
+| No high-risk ports exposed on 0.0.0.0 (Redis/Docker/MySQL/MongoDB) | +35 | "Dangerous port exposed: <service> on 0.0.0.0:<port>" (HIGH) |
+| No suspicious cron jobs (curl\|bash, wget\|sh, accessing ~/.ssh/) | +30 | "Suspicious cron job: <command>" (HIGH) |
+| No sensitive env vars with dangerous names (PRIVATE_KEY, MNEMONIC) | +20 | "Sensitive env var exposed: <name>" (MEDIUM) |
+| OpenClaw config files have proper permissions (600) if applicable | +15 | "OpenClaw config <file> permissions too open" (MEDIUM) |
+
+#### Dimension 4: Runtime Protection (weight: 15%)
+
+Checks whether the agent has active security monitoring.
+
+| Check | Score | If failed → finding |
+|-------|-------|---------------------|
+| Security hooks/guards installed (AgentGuard, custom hooks, etc.) | +40 | "No security hooks installed — actions are unmonitored" (HIGH) |
+| Security audit log exists with recent events | +30 | "No security audit log — no threat history available" (MEDIUM) |
+| Skills have been security-scanned at least once | +30 | "Installed skills have never been security-scanned" (MEDIUM) |
+
+#### Dimension 5: Web3 Safety (weight: 15% if applicable)
+
+Only if Web3 usage is detected (env vars like `GOPLUS_API_KEY`, `CHAIN_ID`, `RPC_URL`, or web3-related skills installed). Otherwise `{ "score": null, "na": true }`.
+
+| Check | Score | If failed → finding |
+|-------|-------|---------------------|
+| No wallet-draining patterns (approve+transferFrom) in skill code | +40 | "Wallet-draining pattern detected in <skill>" (CRITICAL) |
+| No unlimited token approval patterns in skill code | +30 | "Unlimited approval pattern detected in <skill>" (HIGH) |
+| Transaction security API configured (GoPlus or equivalent) | +30 | "No transaction security API — Web3 calls are unverified" (MEDIUM) |
+
+#### Composite Score
+
+Weighted average of all applicable dimensions. If Web3 Safety is N/A, redistribute its 15% weight proportionally.
+
+Determine tier:
+- 90–100 → Tier **S** (JACKED)
+- 70–89 → Tier **A** (Healthy)
+- 50–69 → Tier **B** (Tired)
+- 0–49 → Tier **F** (Critical)
+
+### Step 3: Generate Analysis Report
+
+Based on all collected data and findings, write a **comprehensive security analysis report** as a single text block. This is where you use your AI reasoning ability — don't just list facts, **analyze** them:
+
+- Summarize the overall security posture in 2-3 sentences
+- Highlight the most critical risks and explain **why** they matter (e.g. "Your ~/.ssh/ permissions allow any process running as your user to read your private keys, which means a malicious skill could silently exfiltrate them")
+- For each major finding, provide a specific actionable fix (exact command to run)
+- Note what's going well — acknowledge secure areas
+- If applicable, explain attack scenarios that the current configuration is vulnerable to (e.g. "A malicious skill could install a cron job that phones home your credentials every hour")
+- Keep the tone professional but direct, like a security consultant's report
+
+This report goes into the `"analysis"` field of the JSON output.
+
+Also generate a list of actionable recommendations as `{ "severity": "...", "text": "..." }` objects for the structured view.
+
+### Step 4: Generate Report
+
+Assemble the results into a JSON object and pipe it to the report generator:
+
+```json
+{
+  "timestamp": "<ISO 8601>",
+  "composite_score": <0-100>,
+  "tier": "<S|A|B|F>",
+  "dimensions": {
+    "code_safety": { "score": <n>, "findings": [...], "details": "<one-line summary>" },
+    "credential_safety": { "score": <n>, "findings": [...], "details": "<one-line summary>" },
+    "network_exposure": { "score": <n>, "findings": [...], "details": "<one-line summary>" },
+    "runtime_protection": { "score": <n>, "findings": [...], "details": "<one-line summary>" },
+    "web3_safety": { "score": <n|null>, "na": <bool>, "findings": [...], "details": "<one-line summary>" }
+  },
+  "skills_scanned": <count>,
+  "protection_level": "<level>",
+  "analysis": "<the comprehensive AI-written security analysis report>",
+  "recommendations": [
+    { "severity": "HIGH", "text": "..." }
+  ]
+}
+```
+
+Execute:
+```bash
+echo '<json>' | node scripts/checkup-report.js
+```
+
+The script outputs the HTML file path to stdout and opens it in the browser automatically.
+
+### Step 5: Terminal Summary
+
+After the report generates, output a brief summary in the terminal:
+
+```
+## 🦞 GoPlus AgentGuard Health Checkup
+
+**Overall Health Score**: <score> / 100 (Tier <grade> — <label>)
+**Quote**: "<lobster quote>"
+
+| Dimension | Score | Status |
+|-----------|-------|--------|
+| 🔍 Code Safety | <n>/100 | <EXCELLENT/GOOD/NEEDS WORK/CRITICAL> |
+| 🤝 Trust Hygiene | <n>/100 | <status> |
+| 🛡️ Runtime Defense | <n>/100 | <status> |
+| 🔐 Secret Protection | <n>/100 | <status> |
+| ⛓️ Web3 Shield | <n>/100 or N/A | <status> |
+| ⚙️ Config Posture | <n>/100 | <status> |
+
+**Full visual report**: <path> (opened in browser)
+
+💡 Top recommendation: <first recommendation text>
+```
+
+Append a summary entry to `~/.agentguard/audit.jsonl`:
+```json
+{"timestamp":"...","event":"checkup","composite_score":<n>,"tier":"<grade>","checks":6,"findings":<count>,"skills_scanned":<count>}
+```
 
 ---
 
