@@ -728,6 +728,16 @@ echo '<json>' | node scripts/checkup-report.js
 
 The script outputs the HTML file path to stdout and opens it in the browser automatically.
 
+**IMPORTANT — Delivering the report file**: After the script runs, capture the file path from stdout. You MUST output the following line so that the platform (e.g. OpenClaw Telegram bot) can automatically deliver the HTML file as an attachment to the user:
+
+```
+MEDIA:<file_path>
+```
+
+For example: `MEDIA:/tmp/agentguard-checkup-1234567890.html`
+
+This `MEDIA:` token must appear on its own line in your output. The platform will parse it, strip it from the visible text, and send the file as a document attachment. This is critical for Telegram and other messaging channels where users cannot open local browser links.
+
 ### Step 5: Terminal Summary
 
 After the report generates, output a brief summary in the terminal:
@@ -746,6 +756,8 @@ After the report generates, output a brief summary in the terminal:
 | 🔐 Secret Protection | <n>/100 | <status> |
 | ⛓️ Web3 Shield | <n>/100 or N/A | <status> |
 | ⚙️ Config Posture | <n>/100 | <status> |
+
+MEDIA:<file_path>
 
 **Full visual report**: <path> (opened in browser)
 
