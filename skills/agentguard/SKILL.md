@@ -89,7 +89,7 @@ For each rule, use Grep to search the relevant file types. Record every match wi
 | 21 | TROJAN_DISTRIBUTION | CRITICAL | md | Trojanized binary download + password + execute |
 | 22 | SUSPICIOUS_PASTE_URL | HIGH | all | URLs to paste sites (pastebin, glot.io, etc.) |
 | 23 | SUSPICIOUS_IP | MEDIUM | all | Hardcoded public IPv4 addresses |
-| 24 | SOCIAL_ENGINEERING | MEDIUM | md | Pressure language + execution instructions |
+| 24 | SOCIAL_ENGINEERING | HIGH | md | Pressure language + execution instructions |
 
 ### Risk Level Calculation
 
@@ -265,6 +265,17 @@ For non-OpenClaw environments, use /agentguard scan and /agentguard report inste
 
 Set `$OC` to the resolved OpenClaw state directory for all subsequent checks.
 
+### Platform Detection
+
+Before running checks, detect the operating system to select the appropriate command variants:
+
+1. Run `uname -s` to get the OS kernel name
+2. Use platform-specific commands throughout:
+   - **Darwin** (macOS): `lsof`, `stat -f "%Lp"`, `/usr/libexec/ApplicationFirewall/socketfilterfw`, `launchctl`
+   - **Linux**: `ss`, `stat -c "%a"`, `ufw`/`iptables`, `systemctl`
+3. For portable permission checks, try both: `stat -f '%Lp' <path> 2>/dev/null || stat -c '%a' <path> 2>/dev/null`
+4. For finding executables, use: `find <path> -type f -executable -mtime -1 2>/dev/null || find <path> -type f -perm +111 -mtime -1 2>/dev/null`
+
 ### The 8 Patrol Checks
 
 #### [1] Skill/Plugin Integrity
@@ -324,7 +335,7 @@ Detect suspicious file modifications in the last 24 hours.
    - `$OC/openclaw.json` → should be 600
    - `$OC/devices/paired.json` → should be 600
    - `~/.ssh/authorized_keys` → should be 600
-4. Detect new executable files in workspace: `find $OC/workspace/ -type f -perm +111 -mtime -1`
+4. Detect new executable files in workspace: `find $OC/workspace/ -type f -executable -mtime -1 2>/dev/null || find $OC/workspace/ -type f -perm +111 -mtime -1 2>/dev/null`
 
 #### [6] Audit Log Analysis (24h)
 

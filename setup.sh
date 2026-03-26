@@ -87,7 +87,10 @@ fi
 echo "[1/5] Building GoPlus AgentGuard..."
 if [ -f "$SCRIPT_DIR/package.json" ]; then
   cd "$SCRIPT_DIR"
-  npm install --ignore-scripts 2>/dev/null
+  if ! npm install --ignore-scripts 2>&1 | tail -3; then
+    echo "  WARN: npm install failed. Some features may not work."
+    echo "  Try running manually: cd $SCRIPT_DIR && npm install"
+  fi
   npm run build 2>/dev/null
   echo "  OK: Build complete"
 else
@@ -99,7 +102,10 @@ fi
 echo "[2/5] Installing CLI dependencies..."
 if [ -d "$SKILL_SRC/scripts" ]; then
   cd "$SKILL_SRC/scripts"
-  npm install 2>/dev/null
+  if ! npm install 2>&1 | tail -3; then
+    echo "  WARN: CLI dependency install failed."
+    echo "  Try running manually: cd $SKILL_SRC/scripts && npm install"
+  fi
   echo "  OK: CLI dependencies installed"
 fi
 
@@ -129,7 +135,10 @@ fi
 # Install node_modules in the target (avoids symlink issues in containers)
 cd "$SKILLS_DIR/scripts"
 if [ -f "package.json" ]; then
-  npm install 2>/dev/null
+  if ! npm install 2>&1 | tail -3; then
+    echo "  WARN: Script dependency install failed in target."
+    echo "  Try running manually: cd $SKILLS_DIR/scripts && npm install"
+  fi
   echo "  OK: Scripts and dependencies installed"
 else
   echo "  WARN: No package.json found in scripts directory"
@@ -143,6 +152,15 @@ if [ ! -f "$AGENTGUARD_DIR/config.json" ]; then
   echo "  OK: Config created (protection level: balanced)"
 else
   echo "  OK: Config already exists (keeping current settings)"
+fi
+
+# ---- Verify scripts ----
+if [ -f "$SKILLS_DIR/scripts/checkup-report.js" ]; then
+  if ! node --check "$SKILLS_DIR/scripts/checkup-report.js" 2>/dev/null; then
+    echo ""
+    echo "  WARN: checkup-report.js has missing dependencies."
+    echo "  Run: cd $SKILLS_DIR/scripts && npm install"
+  fi
 fi
 
 # ---- Done ----
@@ -173,9 +191,12 @@ echo "  Installed to: $SKILLS_DIR"
 echo "  Platform:     $PLATFORM"
 echo ""
 echo "  Other commands:"
-echo "    /agentguard scan <path>    Scan code for security risks"
-echo "    /agentguard trust list     View trusted skills"
-echo "    /agentguard report         View security event log"
+echo "    /agentguard scan <path>       Scan code for security risks"
+echo "    /agentguard action <desc>     Evaluate action safety"
+echo "    /agentguard trust list        View trusted skills"
+echo "    /agentguard report            View security event log"
+echo "    /agentguard config <level>    Set protection level"
+echo "    /agentguard patrol            Security patrol (OpenClaw)"
 echo ""
 echo "  To uninstall: ./setup.sh --uninstall"
 echo ""
