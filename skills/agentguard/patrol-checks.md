@@ -139,7 +139,10 @@ iptables -L INPUT -n 2>/dev/null | head -20
 
 ```bash
 # Established outbound connections
+# Linux
 ss -tnp state established 2>/dev/null || netstat -tnp 2>/dev/null | grep ESTABLISHED
+# macOS
+lsof -i -P -n 2>/dev/null | grep ESTABLISHED
 ```
 
 Cross-reference remote IPs/domains against:
@@ -165,10 +168,13 @@ crontab -l 2>/dev/null
 # System cron directories
 ls -la /etc/cron.d/ /etc/cron.daily/ /etc/cron.hourly/ 2>/dev/null
 
-# Systemd timers
+# Systemd timers (Linux only — skip on macOS)
 systemctl list-timers --all 2>/dev/null
 
-# User systemd units
+# macOS launch agents
+launchctl list 2>/dev/null
+
+# User systemd units (Linux only)
 ls -la ~/.config/systemd/user/ 2>/dev/null
 ```
 
@@ -226,7 +232,7 @@ find /etc/cron.d/ -type f -mtime -1 2>/dev/null
 
 4. **New executable detection**:
    ```bash
-   find $OC/workspace/ -type f -perm +111 -mtime -1 2>/dev/null
+   find $OC/workspace/ -type f -executable -mtime -1 2>/dev/null || find $OC/workspace/ -type f -perm +111 -mtime -1 2>/dev/null
    ```
 
 ---

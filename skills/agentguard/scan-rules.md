@@ -292,7 +292,7 @@ Detects trojanized binary distribution patterns. Flags when 2+ of the following 
 - Version-like patterns (`x.0.0.0`)
 - Values > 255 in any octet
 
-## Rule 24: SOCIAL_ENGINEERING (MEDIUM)
+## Rule 24: SOCIAL_ENGINEERING (HIGH)
 **Files**: `*.md`
 
 | Pattern | Description |

@@ -72,7 +72,7 @@ export const TROJAN_RULES: ScanRule[] = [
   {
     id: 'SOCIAL_ENGINEERING',
     description: 'Detects social engineering pressure language in skill instructions',
-    severity: 'medium',
+    severity: 'high',
     file_patterns: ['*.md'],
     patterns: [
       /CRITICAL\s+REQUIREMENT/i,
