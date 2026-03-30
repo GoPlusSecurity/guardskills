@@ -29,13 +29,27 @@ for (const p of iconPaths) {
   if (existsSync(p)) { faviconB64 = readFileSync(p).toString('base64'); break; }
 }
 
-let input = '';
-process.stdin.setEncoding('utf8');
-process.stdin.on('data', (chunk) => { input += chunk; });
-process.stdin.on('end', () => {
-  try { generateReport(JSON.parse(input)); }
-  catch (err) { process.stderr.write(`Error: ${err.message}\n`); process.exit(1); }
-});
+// Support --file <path> argument to read JSON from file (cross-platform friendly)
+const fileArgIdx = process.argv.indexOf('--file');
+if (fileArgIdx !== -1 && process.argv[fileArgIdx + 1]) {
+  const filePath = process.argv[fileArgIdx + 1];
+  try {
+    const content = readFileSync(filePath, 'utf8');
+    generateReport(JSON.parse(content));
+  } catch (err) {
+    process.stderr.write(`Error reading ${filePath}: ${err.message}\n`);
+    process.exit(1);
+  }
+} else {
+  // Fallback: read JSON from stdin (pipe)
+  let input = '';
+  process.stdin.setEncoding('utf8');
+  process.stdin.on('data', (chunk) => { input += chunk; });
+  process.stdin.on('end', () => {
+    try { generateReport(JSON.parse(input)); }
+    catch (err) { process.stderr.write(`Error: ${err.message}\n`); process.exit(1); }
+  });
+}
 
 // ---------------------------------------------------------------------------
 // Helpers

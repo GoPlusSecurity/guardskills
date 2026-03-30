@@ -8,7 +8,7 @@ metadata:
   version: "1.1"
   optional_env: "GOPLUS_API_KEY, GOPLUS_API_SECRET (for Web3 transaction simulation only)"
 user-invocable: true
-allowed-tools: Read, Grep, Glob, Bash(node *trust-cli.ts *) Bash(node *action-cli.ts *) Bash(*checkup-report.js) Bash(echo *checkup-report.js) Bash(cat *checkup-report.js) Bash(openclaw *) Bash(ss *) Bash(lsof *) Bash(ufw *) Bash(iptables *) Bash(crontab *) Bash(systemctl list-timers *) Bash(find *) Bash(stat *) Bash(env) Bash(sha256sum *) Bash(node *) Bash(cd *)
+allowed-tools: Read, Write, Grep, Glob, Bash(node *trust-cli.ts *) Bash(node *action-cli.ts *) Bash(*checkup-report.js) Bash(echo *checkup-report.js) Bash(cat *checkup-report.js) Bash(openclaw *) Bash(ss *) Bash(lsof *) Bash(ufw *) Bash(iptables *) Bash(crontab *) Bash(systemctl list-timers *) Bash(find *) Bash(stat *) Bash(env) Bash(sha256sum *) Bash(node *) Bash(cd *)
 argument-hint: "[scan|action|patrol|trust|report|config|checkup] [args...]"
 ---
 
@@ -748,12 +748,17 @@ Assemble the results into a JSON object and pipe it to the report generator:
 }
 ```
 
-Execute (remember to `cd` into the skill directory first — see "Resolving Script Paths" above):
+Execute the report generator. **Use the `--file` method for cross-platform compatibility** (the `echo | pipe` method fails on Windows due to shell quoting differences):
+
+1. First, write the JSON to a temporary file using the Write tool (e.g. `/tmp/agentguard-checkup-data.json`)
+2. Then run (remember to `cd` into the skill directory first — see "Resolving Script Paths" above):
 ```bash
-cd <skill_directory> && echo '<json>' | node scripts/checkup-report.js
+cd <skill_directory> && node scripts/checkup-report.js --file /tmp/agentguard-checkup-data.json
 ```
 
 The script outputs the HTML file path to stdout (e.g. `/tmp/agentguard-checkup-1234567890.html`). Capture this path — you will need it for delivery in Step 6.
+
+> **Note**: The script also supports stdin pipe (`echo '<json>' | node scripts/checkup-report.js`) but this may fail on Windows cmd.exe where single quotes are not string delimiters. Always prefer `--file`.
 
 ### Step 5: Terminal Summary (REQUIRED)
 
