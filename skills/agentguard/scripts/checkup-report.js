@@ -1036,7 +1036,7 @@ body{background:#0a0e14;color:#dfe2eb;font-family:'Inter',sans-serif}
   i18n.zh.quote=quotes_zh['${tier.grade}']||quotes_zh.B;
   i18n.en.quote='"${tier.quote.replace(/'/g,"\\'")}\"';
 
-  let curLang='en';
+  let curLang=(${JSON.stringify(data.analysis||'')}).match(/[\u4e00-\u9fff]/) ? 'zh' : 'en';
   window.toggleLang=function(){
     curLang=curLang==='en'?'zh':'en';
     document.getElementById('langLabel').textContent=curLang==='en'?'中文':'EN';
@@ -1053,6 +1053,22 @@ body{background:#0a0e14;color:#dfe2eb;font-family:'Inter',sans-serif}
       if(t)el.textContent=t;
     });
   };
+
+  // Apply initial language on load (auto-detect Chinese from analysis content)
+  if(curLang==='zh'){
+    document.getElementById('langLabel').textContent='EN';
+    document.querySelectorAll('[data-i18n]').forEach(el=>{
+      const key=el.getAttribute('data-i18n');
+      if(key==='findings_range'){
+        const range=el.getAttribute('data-range'),total=el.getAttribute('data-total');
+        el.textContent='发现 — '+range+' / 共 '+total;
+      } else if(i18n.zh[key]!=null)el.textContent=i18n.zh[key];
+    });
+    document.querySelectorAll('.finding-dim,.finding-text,.clean-dims,.rec-text').forEach(el=>{
+      const t=el.getAttribute('data-zh');
+      if(t)el.textContent=t;
+    });
+  }
 
   // Dimension data for share card (must be before shareReport)
   const _dims=${JSON.stringify(Object.fromEntries(Object.entries(DIM_META).map(([k])=>[k,dimensions[k]||{score:null,na:false}])))};
@@ -1336,9 +1352,15 @@ body{background:#0a0e14;color:#dfe2eb;font-family:'Inter',sans-serif}
   writeFileSync(outPath, html, 'utf8');
   console.log(outPath);
 
-  const cmd = process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'start' : 'xdg-open';
-  exec(`${cmd} "${outPath}"`, (err) => {
-    if (err) process.stderr.write(`Could not open browser: ${err.message}\n`);
-  });
-  setTimeout(() => process.exit(0), 2000);
+  // Skip browser open for headless/bot environments (Qclaw, OpenClaw, CI)
+  const isHeadless = process.env.OPENCLAW_STATE_DIR || process.env.QCLAW || process.env.CI;
+  if (!isHeadless) {
+    const cmd = process.platform === 'darwin' ? 'open'
+      : process.platform === 'win32' ? 'start ""'
+      : 'xdg-open';
+    exec(`${cmd} "${outPath}"`, (err) => {
+      if (err) process.stderr.write(`Could not open browser: ${err.message}\n`);
+    });
+  }
+  setTimeout(() => process.exit(0), 3000);
 }

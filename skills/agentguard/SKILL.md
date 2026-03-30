@@ -610,18 +610,20 @@ Run a comprehensive agent health checkup across 6 security dimensions. Generates
 
 ### Step 1: Data Collection
 
+**IMPORTANT: You MUST run ALL 7 checks below — not just the skill scan. The checkup covers 5 security dimensions, not just code scanning. Do NOT skip checks 2–7.**
+
 Run these checks in parallel where possible. These are **universal agent security checks** — they apply to any Claude Code or OpenClaw environment, regardless of whether AgentGuard is installed.
 
-1. **Discover & scan installed skills**: Glob `~/.claude/skills/*/SKILL.md` and `~/.openclaw/skills/*/SKILL.md`. For each discovered skill, **run `/agentguard scan <skill_path>`** using the scan subcommand logic (24 detection rules). Collect the scan results (risk level, findings count, risk tags) for each skill.
-2. **Credential file permissions**: `stat` on `~/.ssh/`, `~/.gnupg/`, and if OpenClaw: `stat` on `$OC/openclaw.json`, `$OC/devices/paired.json`
-3. **Sensitive credential scan (DLP)**: Use Grep to scan workspace memory/logs directories for leaked secrets:
+1. **[REQUIRED] Discover & scan installed skills** (→ feeds Dimension 1: Code Safety): Glob `~/.claude/skills/*/SKILL.md` and `~/.openclaw/skills/*/SKILL.md`. For each discovered skill, **run `/agentguard scan <skill_path>`** using the scan subcommand logic (24 detection rules). Collect the scan results (risk level, findings count, risk tags) for each skill.
+2. **[REQUIRED] Credential file permissions** (→ feeds Dimension 2: Credential Safety): `stat -f '%Lp' <path> 2>/dev/null || stat -c '%a' <path> 2>/dev/null` on `~/.ssh/`, `~/.gnupg/`, and if OpenClaw: on `$OC/openclaw.json`, `$OC/devices/paired.json`
+3. **[REQUIRED] Sensitive credential scan / DLP** (→ feeds Dimension 2: Credential Safety): Use Grep to scan workspace memory/logs directories for leaked secrets:
    - Private keys: `0x[a-fA-F0-9]{64}`, `-----BEGIN.*PRIVATE KEY-----`
    - Mnemonics: sequences of 12+ BIP-39 words, `seed_phrase`, `mnemonic`
    - API keys/tokens: `AKIA[0-9A-Z]{16}`, `gh[pousr]_[A-Za-z0-9_]{36}`, plaintext passwords
-4. **Network exposure**: Run `lsof -i -P -n 2>/dev/null | grep LISTEN` or `ss -tlnp 2>/dev/null` to check for dangerous open ports (Redis 6379, Docker API 2375, MySQL 3306, MongoDB 27017 on 0.0.0.0)
-5. **Scheduled tasks audit**: Check `crontab -l 2>/dev/null` for suspicious entries containing `curl|bash`, `wget|sh`, or accessing `~/.ssh/`
-6. **Environment variable exposure**: Run `env` and check for sensitive variable names (`PRIVATE_KEY`, `MNEMONIC`, `SECRET`, `PASSWORD`) — detect presence only, mask values
-7. **Runtime protection check**: Check if security hooks exist in `~/.claude/settings.json`, check for audit logs at `~/.agentguard/audit.jsonl`
+4. **[REQUIRED] Network exposure** (→ feeds Dimension 3: Network & System): Run `lsof -i -P -n 2>/dev/null | grep LISTEN` or `ss -tlnp 2>/dev/null` to check for dangerous open ports (Redis 6379, Docker API 2375, MySQL 3306, MongoDB 27017 on 0.0.0.0)
+5. **[REQUIRED] Scheduled tasks audit** (→ feeds Dimension 3: Network & System): Check `crontab -l 2>/dev/null` for suspicious entries containing `curl|bash`, `wget|sh`, or accessing `~/.ssh/`
+6. **[REQUIRED] Environment variable exposure** (→ feeds Dimension 3: Network & System): Run `env` and check for sensitive variable names (`PRIVATE_KEY`, `MNEMONIC`, `SECRET`, `PASSWORD`) — detect presence only, mask values
+7. **[REQUIRED] Runtime protection check** (→ feeds Dimension 4: Runtime Protection): Check if security hooks exist in `~/.claude/settings.json` or `~/.openclaw/openclaw.json`, check for audit logs at `~/.agentguard/audit.jsonl`
 
 ### Step 2: Score Calculation
 
@@ -709,6 +711,18 @@ This report goes into the `"analysis"` field of the JSON output.
 
 Also generate a list of actionable recommendations as `{ "severity": "...", "text": "..." }` objects for the structured view.
 
+### Pre-Step-4 Validation
+
+**Before assembling the JSON, verify you have collected data for ALL 5 dimensions:**
+
+- [ ] `code_safety` — from Step 1 check 1 (skill scanning)
+- [ ] `credential_safety` — from Step 1 checks 2 + 3 (permissions + DLP)
+- [ ] `network_exposure` — from Step 1 checks 4 + 5 + 6 (ports + cron + env vars)
+- [ ] `runtime_protection` — from Step 1 check 7 (hooks + audit log)
+- [ ] `web3_safety` — from Step 2 (only if Web3 detected, otherwise `{ "score": null, "na": true }`)
+
+**If any dimension is missing data, go back and run the missing checks. Do NOT submit a report with only code_safety filled in.**
+
 ### Step 4: Generate Report
 
 Assemble the results into a JSON object and pipe it to the report generator:
@@ -741,9 +755,9 @@ cd <skill_directory> && echo '<json>' | node scripts/checkup-report.js
 
 The script outputs the HTML file path to stdout (e.g. `/tmp/agentguard-checkup-1234567890.html`). Capture this path — you will need it for delivery in Step 6.
 
-### Step 5: Terminal Summary
+### Step 5: Terminal Summary (REQUIRED)
 
-After the report generates, output a brief summary in the terminal:
+**You MUST output this summary after the report generates.** This is the primary output the user sees. Do NOT skip this step — always show the score, dimension table, and report path:
 
 ```
 ## 🦞 GoPlus AgentGuard Health Checkup
