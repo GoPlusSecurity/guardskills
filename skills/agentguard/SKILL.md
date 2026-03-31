@@ -627,74 +627,92 @@ Run these checks in parallel where possible. These are **universal agent securit
 
 ### Step 2: Score Calculation
 
-Checklist-based scoring across 6 security dimensions. **Every failed check = 1 finding with severity and description.**
+**Additive scoring**: Each dimension starts at **0**. For each check that **passes**, add the listed points. Maximum is 100 per dimension. **Every failed check = 1 finding with severity and description.**
 
 #### Dimension 1: Skill & Code Safety (weight: 25%)
 
-Uses AgentGuard's 24-rule scan engine (`/agentguard scan`) to audit each installed skill.
+Uses AgentGuard's 24-rule scan engine (`/agentguard scan`) to audit each installed skill. Start at base 100 and **deduct** for findings:
 
-| Check | Score | If failed → finding |
-|-------|-------|---------------------|
-| All skills scanned with risk level LOW | +40 | For each skill with findings, add per-finding: "<rule_id> in <skill>:<file>:<line>" with its severity |
-| No CRITICAL scan findings across all skills | +30 | "CRITICAL: <rule_id> detected in <skill>" (CRITICAL) |
-| No HIGH scan findings across all skills | +30 | "HIGH: <rule_id> detected in <skill>" (HIGH) |
+- Base score: **100**
+- Each CRITICAL finding: **−15**
+- Each HIGH finding: **−8**
+- Each MEDIUM finding: **−3**
+- Floor at **0** (never negative)
 
-Deductions from base 100: each CRITICAL finding −15, HIGH −8, MEDIUM −3. Floor at 0.
+For each finding, add: `"<rule_id> in <skill>:<file>:<line>"` with its severity.
 
-If no skills installed: score = 70, add finding: "No third-party skills installed — no code to audit" (LOW).
+If no skills installed: score = **70**, add finding: "No third-party skills installed — no code to audit" (LOW).
 
 #### Dimension 2: Credential & Secret Safety (weight: 25%)
 
-Checks for leaked credentials and permission hygiene.
+Checks for leaked credentials and permission hygiene. Start at **0**, add points for each check that **passes** (total possible = 100):
 
-| Check | Score | If failed → finding |
-|-------|-------|---------------------|
-| `~/.ssh/` permissions are 700 or stricter | +25 | "~/.ssh/ permissions too open (<actual>) — should be 700" (HIGH) |
-| `~/.gnupg/` permissions are 700 or stricter | +15 | "~/.gnupg/ permissions too open (<actual>) — should be 700" (MEDIUM) |
-| No private keys (hex 0x..64, PEM) found in skill code or workspace | +25 | "Plaintext private key found in <location>" (CRITICAL) |
-| No mnemonic phrases found in skill code or workspace | +20 | "Plaintext mnemonic found in <location>" (CRITICAL) |
-| No API keys/tokens (AWS AKIA.., GitHub gh*_) found in skill code | +15 | "API key/token found in <location>" (HIGH) |
+| Check | Points if PASS | If FAIL → finding |
+|-------|---------------|-------------------|
+| `~/.ssh/` permissions are 700 or stricter | **+25** | "~/.ssh/ permissions too open (<actual>) — should be 700" (HIGH) |
+| `~/.gnupg/` permissions are 700 or stricter | **+15** | "~/.gnupg/ permissions too open (<actual>) — should be 700" (MEDIUM) |
+| No private keys (hex 0x..64, PEM) found in skill code or workspace | **+25** | "Plaintext private key found in <location>" (CRITICAL) |
+| No mnemonic phrases found in skill code or workspace | **+20** | "Plaintext mnemonic found in <location>" (CRITICAL) |
+| No API keys/tokens (AWS AKIA.., GitHub gh*_) found in skill code | **+15** | "API key/token found in <location>" (HIGH) |
 
 #### Dimension 3: Network & System Exposure (weight: 20%)
 
-Checks for dangerous network exposure and system-level risks.
+Checks for dangerous network exposure and system-level risks. Start at **0**, add points for each check that **passes** (total possible = 100):
 
-| Check | Score | If failed → finding |
-|-------|-------|---------------------|
-| No high-risk ports exposed on 0.0.0.0 (Redis/Docker/MySQL/MongoDB) | +35 | "Dangerous port exposed: <service> on 0.0.0.0:<port>" (HIGH) |
-| No suspicious cron jobs (curl\|bash, wget\|sh, accessing ~/.ssh/) | +30 | "Suspicious cron job: <command>" (HIGH) |
-| No sensitive env vars with dangerous names (PRIVATE_KEY, MNEMONIC) | +20 | "Sensitive env var exposed: <name>" (MEDIUM) |
-| OpenClaw config files have proper permissions (600) if applicable | +15 | "OpenClaw config <file> permissions too open" (MEDIUM) |
+| Check | Points if PASS | If FAIL → finding |
+|-------|---------------|-------------------|
+| No high-risk ports exposed on 0.0.0.0 (Redis/Docker/MySQL/MongoDB) | **+35** | "Dangerous port exposed: <service> on 0.0.0.0:<port>" (HIGH) |
+| No suspicious cron jobs (curl\|bash, wget\|sh, accessing ~/.ssh/) | **+30** | "Suspicious cron job: <command>" (HIGH) |
+| No sensitive env vars with dangerous names (PRIVATE_KEY, MNEMONIC) | **+20** | "Sensitive env var exposed: <name>" (MEDIUM) |
+| OpenClaw config files have proper permissions (600) if applicable | **+15** | "OpenClaw config <file> permissions too open" (MEDIUM) |
+
+**Example**: If no dangerous ports (+35), no suspicious cron (+30), but env var `PRIVATE_KEY` found (+0), and not OpenClaw (+15 skip, give points) → score = 35 + 30 + 0 + 15 = **80**.
 
 #### Dimension 4: Runtime Protection (weight: 15%)
 
-Checks whether the agent has active security monitoring.
+Checks whether the agent has active security monitoring. Start at **0**, add points for each check that **passes** (total possible = 100):
 
-| Check | Score | If failed → finding |
-|-------|-------|---------------------|
-| Security hooks/guards installed (AgentGuard, custom hooks, etc.) | +40 | "No security hooks installed — actions are unmonitored" (HIGH) |
-| Security audit log exists with recent events | +30 | "No security audit log — no threat history available" (MEDIUM) |
-| Skills have been security-scanned at least once | +30 | "Installed skills have never been security-scanned" (MEDIUM) |
+| Check | Points if PASS | If FAIL → finding |
+|-------|---------------|-------------------|
+| Security hooks/guards installed (AgentGuard, custom hooks, etc.) | **+40** | "No security hooks installed — actions are unmonitored" (HIGH) |
+| Security audit log exists with recent events | **+30** | "No security audit log — no threat history available" (MEDIUM) |
+| Skills have been security-scanned at least once | **+30** | "Installed skills have never been security-scanned" (MEDIUM) |
 
 #### Dimension 5: Web3 Safety (weight: 15% if applicable)
 
-Only if Web3 usage is detected (env vars like `GOPLUS_API_KEY`, `CHAIN_ID`, `RPC_URL`, or web3-related skills installed). Otherwise `{ "score": null, "na": true }`.
+Only if Web3 usage is detected (env vars like `GOPLUS_API_KEY`, `CHAIN_ID`, `RPC_URL`, or web3-related skills installed). Otherwise `{ "score": null, "na": true }`. Start at **0**, add points for each check that **passes** (total possible = 100):
 
-| Check | Score | If failed → finding |
-|-------|-------|---------------------|
-| No wallet-draining patterns (approve+transferFrom) in skill code | +40 | "Wallet-draining pattern detected in <skill>" (CRITICAL) |
-| No unlimited token approval patterns in skill code | +30 | "Unlimited approval pattern detected in <skill>" (HIGH) |
-| Transaction security API configured (GoPlus or equivalent) | +30 | "No transaction security API — Web3 calls are unverified" (MEDIUM) |
+| Check | Points if PASS | If FAIL → finding |
+|-------|---------------|-------------------|
+| No wallet-draining patterns (approve+transferFrom) in skill code | **+40** | "Wallet-draining pattern detected in <skill>" (CRITICAL) |
+| No unlimited token approval patterns in skill code | **+30** | "Unlimited approval pattern detected in <skill>" (HIGH) |
+| Transaction security API configured (GoPlus or equivalent) | **+30** | "No transaction security API — Web3 calls are unverified" (MEDIUM) |
 
-#### Composite Score
+#### Composite Score Calculation
 
-Weighted average of all applicable dimensions. If Web3 Safety is N/A, redistribute its 15% weight proportionally.
+Calculate the weighted average of all applicable dimensions:
 
-Determine tier:
-- 90–100 → Tier **S** (JACKED)
-- 70–89 → Tier **A** (Healthy)
-- 50–69 → Tier **B** (Tired)
-- 0–49 → Tier **F** (Critical)
+```
+composite_score = (code_safety × 0.25) + (credential_safety × 0.25) + (network_exposure × 0.20) + (runtime_protection × 0.15) + (web3_safety × 0.15)
+```
+
+If Web3 Safety is N/A, redistribute its 15% weight proportionally across the other 4 dimensions:
+```
+composite_score = (code_safety × 0.294) + (credential_safety × 0.294) + (network_exposure × 0.235) + (runtime_protection × 0.176)
+```
+
+Round to the nearest integer.
+
+**Tier assignment (MUST use these exact thresholds):**
+
+| Score Range | Tier | Label |
+|-------------|------|-------|
+| **90–100** | **S** | JACKED |
+| **70–89** | **A** | Healthy |
+| **50–69** | **B** | Tired |
+| **0–49** | **F** | Critical |
+
+**Example**: code_safety=100, credential_safety=80, network_exposure=85, runtime_protection=30, web3=N/A → composite = (100×0.294)+(80×0.294)+(85×0.235)+(30×0.176) = 29.4+23.5+20.0+5.3 = **78** → Tier **A** (Healthy).
 
 ### Step 3: Generate Analysis Report
 
