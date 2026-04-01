@@ -23,6 +23,7 @@ npm test
 - `skills/agentguard/` — Claude Code skill definition (SKILL.md + reference docs)
 - `hooks/` — Plugin hooks configuration for auto-guard
 - `examples/` — Demo projects for testing
+- `docs/i18n/` — Localized documentation and translated README files
 
 ## Making Changes
 
@@ -31,6 +32,13 @@ npm test
 3. Make your changes
 4. Run `npm run build && npm test` to verify
 5. Submit a pull request
+
+## Documentation Translations
+
+- Keep the canonical source in English unless maintainers decide otherwise
+- Store translated README files in `docs/i18n/`
+- Use locale-based names such as `README.zh-Hans.md`, `README.zh-Hant.md`, and `README.ja.md`
+- When updating translated files, preserve the same section order as the main `README.md`
 
 ## Adding Detection Rules
 
